@@ -1,4 +1,5 @@
 output.log
 go.mod
 main.go
-.piece_move_logic
+piece_move_logic
+.gitignore
