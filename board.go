@@ -16,16 +16,16 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-const boardSize = 8
-const pieceDir = "chess-gui/peices"
+const boardSize=8
+const pieceDir="chess-gui/peices"
 
-const startFenNotation = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+const startFenNotation="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-var mpPieceToImage = map[rune]string{
-	'P': "whitePawn.svg", 'N': "whiteKnight.svg", 'B': "whiteBishop.svg", 'R': "whiteRook.svg",
-	'Q': "whiteQueen.svg", 'K': "whiteKing.svg",
-	'p': "blackPawn.svg", 'n': "blackKnight.svg", 'b': "blackBishop.svg", 'r': "blackRook.svg",
-	'q': "blackQueen.svg", 'k': "blackKing.svg",
+var mpPieceToImage=map[rune]string{
+	'P':"whitePawn.svg",'N':"whiteKnight.svg", 'B': "whiteBishop.svg", 'R': "whiteRook.svg",
+	'Q':"whiteQueen.svg",'K':"whiteKing.svg",
+	'p':"blackPawn.svg",'n':"blackKnight.svg", 'b': "blackBishop.svg", 'r': "blackRook.svg",
+	'q':"blackQueen.svg",'k':"blackKing.svg",
 }
 
 var selectedRow, selectedCol int
@@ -63,7 +63,7 @@ func getBlackPieces() [][2]int {
 func handlePieceClick(row, col int){
 	clickedPiece:=parsedBoard[row][col]
 
-	if !pieceSelected {
+	if !pieceSelected{
 		if clickedPiece != 0 && (whiteTurn == isWhite(clickedPiece)) {
 			selectedRow, selectedCol = row, col
 			pieceSelected = true
@@ -84,7 +84,6 @@ func handlePieceClick(row, col int){
 			fmt.Println("Piece deselected")
 			return
 		}
-
 		movePiece(selectedRow, selectedCol, row, col)
 	}
 }
@@ -261,25 +260,37 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 			whiteKing.IsCheck = false
 		}
 	}
-	fmt.Printf("Moved %c from (%d, %d) to (%d, %d)\n", piece, fromRow, fromCol, toRow, toCol)
-	whiteTurn = !whiteTurn
-	pieceSelected = false
+	//fmt.Printf("Moved %c from (%d, %d) to (%d, %d)\n", piece, fromRow, fromCol, toRow, toCol)
+	// if !whiteTurn {
+	// 	handlers.GenereateAllMoves(parsedBoard,whiteTurn)
+	// }
+	
+	whiteTurn=!whiteTurn
+	if !whiteTurn{
+		bestMove:=handlers.FindBestMove(parsedBoard,whiteTurn)
+		fmt.Println("BEst Possible Move",bestMove)
+	}
 
+	pieceSelected=false
+	board_state:=handlers.Evaluate_board(parsedBoard)
+	fmt.Println("Final state of the board is ",board_state)
+	legal_moves:=handlers.GenereateAllMoves(parsedBoard,whiteTurn)
+	fmt.Println(legal_moves)
 	updateBoardUI(fromRow, fromCol, toRow, toCol)
 
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 8; j++ {
-			if parsedBoard[i][j] != 0 {
-				fmt.Printf("%c ", parsedBoard[i][j])
-			} else {
-				fmt.Printf("  ")
-			}
+	// for i := 0; i < 8; i++ {
+	// 	for j := 0; j < 8; j++ {
+	// 		if parsedBoard[i][j] != 0 {
+	// 			fmt.Printf("%c ", parsedBoard[i][j])
+	// 		} else {
+	// 			fmt.Printf("  ")
+	// 		}
 
-		}
-		fmt.Println()
-	}
+	// 	}
+	// 	fmt.Println()
+	// }
 	//fmt.Println(whiteKing.IsCheck, blackKing.IsCheck)
-	fmt.Println("White Score:", whiteScore, "Black Score:", blackScore)
+	//fmt.Println("White Score:", whiteScore, "Black Score:", blackScore)
 
 }
 

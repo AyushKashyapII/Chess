@@ -9,6 +9,11 @@ type CastlingRights struct {
 	BlackQueenSide bool
 }
 
+type Move struct {
+	FromRow,FromCol int
+	ToRow,ToCol int
+}
+
 var initialPositions = map[string]bool{
 	"e1": true,
 	"e8": true, 
@@ -205,10 +210,63 @@ func abs(x int) int {
 	return x
 }
 
-// //func KingIsCheck(board [8][8]rune, piece rune, toRow, toCol, kingRow, kingCol int) bool {
-// 	if IsValidMove(board, piece, toRow, toCol, kingRow, kingCol) {
-// 		return true
-// 	}
-// 	return false
+func GenereateAllMoves(board[8][8] rune,isWhiteTurn bool) []Move{
+	var legaMoves []Move
+	for fromRow:=0;fromRow<8;fromRow++{
+		for fromCol:=0;fromCol<8;fromCol++{
+			piece:=board[fromRow][fromCol]
+			
+			if piece==0 || isWhite(piece) {
+				continue
+			}
+			for toRow:=0;toRow<8;toRow++{
+				for toCol:=0;toCol<8;toCol++{
+					if IsValidMove(board,piece,fromRow,fromCol,toRow,toCol,nil){
+						tempBoard:=board
+						tempBoard[toRow][toCol]=piece
+						tempBoard[fromRow][fromCol]=0
 
-// }
+						kingRow,kingCol:=-1,-1
+						for r:=0;r<8;r++{
+							for c:=0;c<8;c++{
+								if tempBoard[r][c]=='k'{
+									kingRow=r
+									kingCol=c
+									break
+								}
+							}
+						}
+
+						if !IsSquareUnderAttack(tempBoard,kingRow,kingCol,isWhiteTurn){
+							newMove:=Move{FromRow:fromRow,FromCol:fromCol,ToRow:toRow,ToCol:toCol}
+							legaMoves=append(legaMoves,newMove)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return legaMoves
+}
+
+func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
+	var bestMove Move
+	var bestScore=100000
+
+	allMoves:=GenereateAllMoves(board,isWhiteTurn)
+
+	for _,move := range allMoves {
+		tempBoard:=board
+		piece:=tempBoard[move.FromRow][move.FromCol]
+		tempBoard[move.ToRow][move.ToCol]=piece
+		tempBoard[move.FromRow][move.FromCol]=0
+
+		score:=Evaluate_board(tempBoard)
+
+		if score<bestScore{
+			bestMove=move
+		}
+	}
+	return bestMove
+}
