@@ -1,6 +1,9 @@
 package handlers
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 type CastlingRights struct {
 	WhiteKingSide  bool
@@ -155,8 +158,8 @@ func IsValidMove(board [8][8]rune, piece rune, fromRow, fromCol, toRow, toCol in
 		if abs(fromRow-toRow) <= 1 && abs(fromCol-toCol) <= 1 {
 			return true
 		}
-		if IsCastleable(board, fromRow, fromCol, toRow, toCol) {
-			return true
+		if abs(fromCol-toCol)==2 && fromRow==toRow {
+			return IsCastleable(board, fromRow, fromCol, toRow, toCol)
 		}
 
 	}
@@ -210,13 +213,66 @@ func abs(x int) int {
 	return x
 }
 
+func score_move(move Move,board[8][8] rune) int{
+	startRow:=move.FromRow
+	startCol:=move.FromCol
+	endRow:=move.ToRow
+	endCol:=move.ToCol
+
+	current_piece:=board[startRow][startCol]
+	next_piece:=board[endRow][endCol]
+
+	score:=0
+
+	if next_piece!=0{
+		score=abs(GetValue(next_piece))-abs(GetValue(current_piece))
+		score=score*100
+	}
+	var tempBoard [8][8]rune
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			tempBoard[i][j] = board[i][j]
+		}
+	}
+	prev:=Evaluate_board(tempBoard)
+	tempBoard[endRow][endCol]=current_piece
+	tempBoard[startRow][startCol]=0
+	after:=Evaluate_board(tempBoard)
+	//black promition and position changes 
+	if !isWhite(current_piece) {
+		if startRow==6 && endRow==7{
+			score+=800
+		}
+		if after-prev<0{
+			score+=abs(after-prev)
+		}else{
+			score-=abs(after-prev)
+		}
+	}
+	//white promotion and psoition changes 
+	if isWhite(current_piece){
+		if startRow==1 && endRow==0{
+			score+=800
+		}
+		score+=after-prev
+	}
+	return score
+
+}
+
 func GenereateAllMoves(board[8][8] rune,isWhiteTurn bool) []Move{
-	var legaMoves []Move
+	var legalMoves []Move
 	for fromRow:=0;fromRow<8;fromRow++{
 		for fromCol:=0;fromCol<8;fromCol++{
 			piece:=board[fromRow][fromCol]
 			
-			if piece==0 || isWhite(piece) {
+			if piece==0 {
+				continue
+			}
+			if isWhiteTurn && !isWhite(piece) {
+				continue
+			}
+			if !isWhiteTurn && isWhite(piece) {
 				continue
 			}
 			for toRow:=0;toRow<8;toRow++{
@@ -239,7 +295,7 @@ func GenereateAllMoves(board[8][8] rune,isWhiteTurn bool) []Move{
 
 						if !IsSquareUnderAttack(tempBoard,kingRow,kingCol,isWhiteTurn){
 							newMove:=Move{FromRow:fromRow,FromCol:fromCol,ToRow:toRow,ToCol:toCol}
-							legaMoves=append(legaMoves,newMove)
+							legalMoves=append(legalMoves,newMove)
 						}
 					}
 				}
@@ -247,26 +303,86 @@ func GenereateAllMoves(board[8][8] rune,isWhiteTurn bool) []Move{
 		}
 	}
 
-	return legaMoves
+	sort.Slice(legalMoves,func (i,j int) bool{
+		score_i:=score_move(legalMoves[i],board)
+		score_j:=score_move(legalMoves[j],board)
+
+		return score_i>score_j
+	})
+
+	return legalMoves
 }
 
 func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
 	var bestMove Move
 	var bestScore=100000
+	var depth=3
+	var alpha=-10000
+	var beta=10000
 
 	allMoves:=GenereateAllMoves(board,isWhiteTurn)
-
+	if len(allMoves)==0 {
+		fmt.Println("U have lost MINIMAX")
+	}
+	
+	//fmt.Println("hit 1")
 	for _,move := range allMoves {
+		//fmt.Println(move)
 		tempBoard:=board
 		piece:=tempBoard[move.FromRow][move.FromCol]
 		tempBoard[move.ToRow][move.ToCol]=piece
 		tempBoard[move.FromRow][move.FromCol]=0
 
-		score:=Evaluate_board(tempBoard)
-
+		score:=Minimax(tempBoard,depth,!isWhiteTurn,alpha,beta)
+		//fmt.Println(score,"score")
+		//fmt.Println(move,"move")
 		if score<bestScore{
+			bestScore=score
 			bestMove=move
 		}
 	}
 	return bestMove
+}
+
+func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int) int{
+	if depth==0 {
+		return Evaluate_board(board)
+	}
+	if isWhiteTurn{
+		allMoves:=GenereateAllMoves(board,isWhiteTurn)
+		best_white_score:=-100000
+		for _,move:=range allMoves {
+			tempBoard:=board
+			piece:=tempBoard[move.FromRow][move.FromCol]
+			tempBoard[move.ToRow][move.ToCol]=piece
+			tempBoard[move.FromRow][move.FromCol]=0
+
+			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta)
+			alpha=max(alpha,score)
+			best_white_score=max(score,best_white_score)
+			if(alpha>=beta){
+				break
+			}
+
+		}
+		return best_white_score
+	} else {
+		allMoves:=GenereateAllMoves(board,isWhiteTurn)
+		best_black_score:=100000
+		//fmt.Println("hitting minimax black turn ")
+		for _,move:=range allMoves {
+			tempBoard:=board
+			piece:=tempBoard[move.FromRow][move.FromCol]
+			tempBoard[move.ToRow][move.ToCol]=piece
+			tempBoard[move.FromRow][move.FromCol]=0
+			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta)
+			beta=min(beta,score)
+			best_black_score=min(score,best_black_score)
+			if alpha>=beta{
+				break
+			}
+
+		}
+		return best_black_score
+	}
 }

@@ -143,7 +143,7 @@ func abs(x int) int {
 }
 
 func movePiece(fromRow, fromCol, toRow, toCol int) {
-	if fromRow == toRow && fromCol == toCol {
+	if fromRow==toRow && fromCol==toCol {
 		pieceSelected = false
 		return
 	}
@@ -241,14 +241,12 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 		if isWhitePiece {
 			fmt.Println("Black KING is under check")
 			blackKing.IsCheck = true
-			// Check for checkmate
 			if isCheckmate(false) {
 				fmt.Println("Checkmate! White wins!")
 			}
 		} else {
 			fmt.Println("White KING is under check")
 			whiteKing.IsCheck = true
-			// Check for checkmate
 			if isCheckmate(true) {
 				fmt.Println("Checkmate! Black wins!")
 			}
@@ -260,38 +258,21 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 			whiteKing.IsCheck = false
 		}
 	}
-	//fmt.Printf("Moved %c from (%d, %d) to (%d, %d)\n", piece, fromRow, fromCol, toRow, toCol)
-	// if !whiteTurn {
-	// 	handlers.GenereateAllMoves(parsedBoard,whiteTurn)
-	// }
-	
 	whiteTurn=!whiteTurn
+	pieceSelected=false
+	updateBoardUI(fromRow, fromCol, toRow, toCol)
 	if !whiteTurn{
 		bestMove:=handlers.FindBestMove(parsedBoard,whiteTurn)
-		fmt.Println("BEst Possible Move",bestMove)
+		//fmt.Println("BEst Possible Move",bestMove)
+		black_piece:=parsedBoard[bestMove.FromRow][bestMove.FromCol]
+		parsedBoard[bestMove.FromRow][bestMove.FromCol]=0
+		parsedBoard[bestMove.ToRow][bestMove.ToCol]=black_piece
+		if piece=='k'{
+			blackKing.Row,blackKing.Col=bestMove.ToRow,bestMove.ToCol
+		}
+		updateBoardUI(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
+		whiteTurn=!whiteTurn
 	}
-
-	pieceSelected=false
-	board_state:=handlers.Evaluate_board(parsedBoard)
-	fmt.Println("Final state of the board is ",board_state)
-	legal_moves:=handlers.GenereateAllMoves(parsedBoard,whiteTurn)
-	fmt.Println(legal_moves)
-	updateBoardUI(fromRow, fromCol, toRow, toCol)
-
-	// for i := 0; i < 8; i++ {
-	// 	for j := 0; j < 8; j++ {
-	// 		if parsedBoard[i][j] != 0 {
-	// 			fmt.Printf("%c ", parsedBoard[i][j])
-	// 		} else {
-	// 			fmt.Printf("  ")
-	// 		}
-
-	// 	}
-	// 	fmt.Println()
-	// }
-	//fmt.Println(whiteKing.IsCheck, blackKing.IsCheck)
-	//fmt.Println("White Score:", whiteScore, "Black Score:", blackScore)
-
 }
 
 func isCheckmate(isWhiteKing bool) bool {
@@ -305,14 +286,12 @@ func isCheckmate(isWhiteKing bool) bool {
 		map[bool]string{true: "White", false: "Black"}[isWhiteKing],
 		kingPos.Row, kingPos.Col)
 
-	// First verify the king is actually in check
 	if !kingPos.IsCheck {
 		fmt.Println("King is not in check - cannot be checkmate")
 		return false
 	}
 
 	fmt.Println("\nChecking all possible king moves:")
-	// Try all possible king moves
 	kingMoves := [][2]int{
 		{-1, -1}, {-1, 0}, {-1, 1},
 		{0, -1}, {0, 1},
@@ -324,13 +303,11 @@ func isCheckmate(isWhiteKing bool) bool {
 		kingPiece = 'K'
 	}
 
-	// Check each possible king move
 	for _, move := range kingMoves {
 		newRow := kingPos.Row + move[0]
 		newCol := kingPos.Col + move[1]
 
 		if newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8 {
-			// Create a deep copy of the board
 			tempBoard := [8][8]rune{}
 			for i := 0; i < 8; i++ {
 				for j := 0; j < 8; j++ {
@@ -351,7 +328,6 @@ func isCheckmate(isWhiteKing bool) bool {
 					return false
 				}
 				fmt.Println("square is under attack")
-
 			} else {
 				fmt.Println("square occupied by friendly piece")
 			}
@@ -375,13 +351,18 @@ func performCastling(fromRow, fromCol, toRow, toCol int, piece rune) {
 	parsedBoard[fromRow][fromCol] = 0
 
 	rook := 'R'
+	king_Position:=&whiteKing
 	if piece == 'k' {
 		rook = 'r'
+		king_Position:=&blackKing
 	}
 	parsedBoard[toRow][rookToCol] = rook
 	parsedBoard[toRow][rookFromCol] = 0
 
 	updateBoardUI(fromRow, fromCol, toRow, toCol)
+	king_Position.Row=toRow
+	king_Position.Col=toCol
+
 	updateBoardUI(toRow, rookFromCol, toRow, rookToCol)
 
 	whiteTurn = !whiteTurn
