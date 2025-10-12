@@ -106,7 +106,7 @@ func IsCastleable(board [8][8]rune, fromRow, fromCol, toRow, toCol int) bool {
 			}
 		}
 	}
-	fmt.Println("Castleable")
+	//fmt.Println("Castleable")
 	return true
 }
 

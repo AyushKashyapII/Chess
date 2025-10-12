@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"log"
 	"chess-engine/handlers"
 	"fmt"
 	"image/color"
@@ -18,6 +20,7 @@ import (
 
 const boardSize=8
 const pieceDir="chess-gui/peices"
+var verbose *bool
 
 const startFenNotation="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -161,11 +164,14 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 	if (piece == 'K' || piece == 'k') && abs(fromCol-toCol) == 2 {
 		if handlers.IsCastleable(parsedBoard, fromRow, fromCol, toRow, toCol) {
 			performCastling(fromRow, fromCol, toRow, toCol, piece)
+			//parsedBoard[toRow][toCol]=parsedBoard[fromRow][fromCol]
+			//parsedBoard[fromRow][fromCol]=0
+			return
+		}else{
+			fmt.Println("Not Possible to castle")
+			pieceSelected = false
 			return
 		}
-		fmt.Println("Not Possible to castle")
-		pieceSelected = false
-		return
 	}
 	if targetPiece != 0 && ((whiteTurn && isTargetWhitePiece) || (!whiteTurn && !isTargetWhitePiece)) {
 		fmt.Println("Can't capture own piece")
@@ -261,18 +267,37 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 	whiteTurn=!whiteTurn
 	pieceSelected=false
 	updateBoardUI(fromRow, fromCol, toRow, toCol)
+	if whiteTurn{
+		fmt.Println("White move")
+	}else{
+		fmt.Println("Black move")
+	}
+		for i := 0; i < 8; i++ {
+			for j := 0; j < 8; j++ {
+				piece := parsedBoard[i][j]
+				if piece == 0 {
+					fmt.Print(". ") 
+				} else {
+					fmt.Printf("%c ", piece)
+				}
+			}
+			fmt.Println() 
+		}
 	if !whiteTurn{
 		bestMove:=handlers.FindBestMove(parsedBoard,whiteTurn)
-		//fmt.Println("BEst Possible Move",bestMove)
-		black_piece:=parsedBoard[bestMove.FromRow][bestMove.FromCol]
-		parsedBoard[bestMove.FromRow][bestMove.FromCol]=0
-		parsedBoard[bestMove.ToRow][bestMove.ToCol]=black_piece
-		if piece=='k'{
-			blackKing.Row,blackKing.Col=bestMove.ToRow,bestMove.ToCol
-		}
-		updateBoardUI(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
-		whiteTurn=!whiteTurn
+		movePiece(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
+		// //fmt.Println("BEst Possible Move",bestMove)
+		// black_piece:=parsedBoard[bestMove.FromRow][bestMove.FromCol]
+		// parsedBoard[bestMove.FromRow][bestMove.FromCol]=0
+		// parsedBoard[bestMove.ToRow][bestMove.ToCol]=black_piece
+		// if piece=='k'{
+		// 	blackKing.Row,blackKing.Col=bestMove.ToRow,bestMove.ToCol
+		// }
+		// updateBoardUI(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
+		// whiteTurn=!whiteTurn
 	}
+
+
 }
 
 func isCheckmate(isWhiteKing bool) bool {
@@ -348,20 +373,28 @@ func performCastling(fromRow, fromCol, toRow, toCol int, piece rune) {
 	}
 
 	parsedBoard[toRow][toCol] = piece
+	fmt.Printf("%c",piece)
+	fmt.Println("")
 	parsedBoard[fromRow][fromCol] = 0
 
-	rook := 'R'
-	king_Position:=&whiteKing
-	if piece == 'k' {
-		rook = 'r'
-		king_Position:=&blackKing
+	var rook rune
+	var kingToUpdate *KingPosition
+
+	if piece=='k'{
+		rook='r'
+		kingToUpdate=&blackKing
+	}else{
+		rook='R'
+		kingToUpdate=&whiteKing
 	}
 	parsedBoard[toRow][rookToCol] = rook
 	parsedBoard[toRow][rookFromCol] = 0
+	fmt.Println(kingToUpdate.Row," row and col ",kingToUpdate.Col)
 
 	updateBoardUI(fromRow, fromCol, toRow, toCol)
-	king_Position.Row=toRow
-	king_Position.Col=toCol
+	kingToUpdate.Row=toRow
+	kingToUpdate.Col=toCol
+	fmt.Println(kingToUpdate.Row," row and col ",kingToUpdate.Col)
 
 	updateBoardUI(toRow, rookFromCol, toRow, rookToCol)
 
@@ -458,6 +491,16 @@ func generateChessBoard() *fyne.Container {
 }
 
 func main() {
+	verbose=flag.Bool("verbose",false,"enable verbose output")
+	flag.Parse()
+	log.SetFlags(0)
+	if *verbose{
+		log.Println("Verbose mode enabled.")
+	}
+	fmt.Println("This is a regular output")
+	if *verbose{
+		log.Println("This is verbose message ")
+	}
 	chessApp := app.New()
 	//a := app.New()
 	//w := a.NewWindow("Chess Game")
