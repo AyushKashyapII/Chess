@@ -82,6 +82,7 @@ func IsCastleable(board [8][8]rune, fromRow, fromCol, toRow, toCol int) bool {
 	isWhiteKing := piece == 'K'
 
 	if IsInCheck(board, isWhiteKing, row, fromCol) {
+		//fmt.Println("King cant be castled when under check ")
 		return false
 	}
 

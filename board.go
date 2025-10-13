@@ -166,6 +166,10 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 			performCastling(fromRow, fromCol, toRow, toCol, piece)
 			//parsedBoard[toRow][toCol]=parsedBoard[fromRow][fromCol]
 			//parsedBoard[fromRow][fromCol]=0
+			if !whiteTurn{
+				bestMove:=handlers.FindBestMove(parsedBoard,whiteTurn)
+				movePiece(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
+			}
 			return
 		}else{
 			fmt.Println("Not Possible to castle")
@@ -264,14 +268,15 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 			whiteKing.IsCheck = false
 		}
 	}
-	whiteTurn=!whiteTurn
-	pieceSelected=false
-	updateBoardUI(fromRow, fromCol, toRow, toCol)
 	if whiteTurn{
 		fmt.Println("White move")
 	}else{
 		fmt.Println("Black move")
 	}
+	whiteTurn=!whiteTurn
+	pieceSelected=false
+	updateBoardUI(fromRow, fromCol, toRow, toCol)
+	
 		for i := 0; i < 8; i++ {
 			for j := 0; j < 8; j++ {
 				piece := parsedBoard[i][j]
@@ -286,18 +291,7 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 	if !whiteTurn{
 		bestMove:=handlers.FindBestMove(parsedBoard,whiteTurn)
 		movePiece(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
-		// //fmt.Println("BEst Possible Move",bestMove)
-		// black_piece:=parsedBoard[bestMove.FromRow][bestMove.FromCol]
-		// parsedBoard[bestMove.FromRow][bestMove.FromCol]=0
-		// parsedBoard[bestMove.ToRow][bestMove.ToCol]=black_piece
-		// if piece=='k'{
-		// 	blackKing.Row,blackKing.Col=bestMove.ToRow,bestMove.ToCol
-		// }
-		// updateBoardUI(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
-		// whiteTurn=!whiteTurn
 	}
-
-
 }
 
 func isCheckmate(isWhiteKing bool) bool {
@@ -389,12 +383,12 @@ func performCastling(fromRow, fromCol, toRow, toCol int, piece rune) {
 	}
 	parsedBoard[toRow][rookToCol] = rook
 	parsedBoard[toRow][rookFromCol] = 0
-	fmt.Println(kingToUpdate.Row," row and col ",kingToUpdate.Col)
+	//fmt.Println(kingToUpdate.Row," row and col ",kingToUpdate.Col)
 
 	updateBoardUI(fromRow, fromCol, toRow, toCol)
 	kingToUpdate.Row=toRow
 	kingToUpdate.Col=toCol
-	fmt.Println(kingToUpdate.Row," row and col ",kingToUpdate.Col)
+	//fmt.Println(kingToUpdate.Row," row and col ",kingToUpdate.Col)
 
 	updateBoardUI(toRow, rookFromCol, toRow, rookToCol)
 
