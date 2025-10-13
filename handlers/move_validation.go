@@ -314,6 +314,21 @@ func GenereateAllMoves(board[8][8] rune,isWhiteTurn bool) []Move{
 	return legalMoves
 }
 
+func GenerateCaptureMoves(board[8][8] rune,isWhiteTurn bool) []Move {
+	allMoves:=GenereateAllMoves(board,isWhiteTurn)
+	var capturemoves []Move
+	for _,move := range allMoves {
+		isCapture:=board[move.ToRow][move.ToCol]!=0
+		piece:=board[move.FromRow][move.FromCol]
+		isPawn:=piece=='p' || piece=='P'
+		isPromotion:=isPawn && (move.ToRow==0 || move.ToRow==7)
+		if isPromotion || isCapture {
+			capturemoves=append(capturemoves,move)
+		}
+	}
+	return capturemoves
+}
+
 func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
 	var bestMove Move
 	var bestScore=100000
@@ -345,9 +360,62 @@ func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
 	return bestMove
 }
 
+func QuiescenceSearch(board [8][8] rune,isWhiteTurn bool,alpha,beta int) int {
+	base_score:=Evaluate_board(board)
+	if isWhiteTurn{
+		if base_score>=beta{
+			return beta
+		}
+		if base_score> alpha {
+			alpha=base_score
+		}
+	}else{
+		if base_score<=alpha{
+			return alpha
+		}
+		if base_score<beta{
+			beta=base_score
+		}
+	}
+	capture_move:=GenerateCaptureMoves(board,isWhiteTurn)
+	
+	
+	for _,move := range capture_move {
+		var tempBoard[8][8] rune
+		for i:=0;i<8;i++{
+			for j:=0;j<8;j++{
+				tempBoard[i][j]=board[i][j]
+			}
+		}
+
+		piece:=tempBoard[move.FromRow][move.FromCol]
+		tempBoard[move.ToRow][move.ToCol]=piece
+		tempBoard[move.FromRow][move.FromCol]=0
+		score:=QuiescenceSearch(board,!isWhiteTurn,alpha,beta)
+		if isWhiteTurn{
+			if score>alpha{
+				alpha=score
+			}else{
+				if score<beta{
+					beta=score
+				}
+			}
+			if alpha>=beta{
+				break
+			}
+		}
+	}
+
+	if isWhiteTurn{
+		return alpha
+	}else{
+		return beta
+	}
+}
+
 func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int) int{
 	if depth==0 {
-		return Evaluate_board(board)
+		return QuiescenceSearch(board,isWhiteTurn,alpha,beta)
 	}
 	if isWhiteTurn{
 		allMoves:=GenereateAllMoves(board,isWhiteTurn)
