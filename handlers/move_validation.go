@@ -12,10 +12,19 @@ type CastlingRights struct {
 	BlackQueenSide bool
 }
 
+type HashMap struct {
+	Hash uint64
+	Score int
+	Depth int
+	BestMove Move
+}
+
 type Move struct {
 	FromRow,FromCol int
 	ToRow,ToCol int
 }
+
+
 
 var initialPositions = map[string]bool{
 	"e1": true,
@@ -329,6 +338,8 @@ func GenerateCaptureMoves(board[8][8] rune,isWhiteTurn bool) []Move {
 	return capturemoves
 }
 
+
+
 func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
 	var bestMove Move
 	var bestScore=100000
@@ -350,13 +361,14 @@ func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
 		tempBoard[move.FromRow][move.FromCol]=0
 
 		score:=Minimax(tempBoard,depth,!isWhiteTurn,alpha,beta)
-		//fmt.Println(score,"score")
-		//fmt.Println(move,"move")
+
 		if score<bestScore{
 			bestScore=score
 			bestMove=move
 		}
 	}
+	hash:=GetZobristValue(board)
+
 	return bestMove
 }
 

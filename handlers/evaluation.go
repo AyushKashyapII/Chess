@@ -1,5 +1,22 @@
 package handlers
-//import "fmt"
+
+import (
+	"crypto/rand"
+	"encoding/binary"
+)
+
+type Move struct {
+	FromRow,FromCol int
+	ToRow,ToCol int
+}
+
+type HashMap struct {
+	Hash uint64
+	Score int
+	Depth int
+	BestMove Move
+}
+
 var WhitePawnPST = [8][8]int{
 	{0, 0, 0, 0, 0, 0, 0, 0},
 	{50, 50, 50, 50, 50, 50, 50, 50},
@@ -88,6 +105,50 @@ var WhiteKingEndgamePST = [8][8]int{
 	{-30, -30, 0, 0, 0, 0, -30, -30},
 	{-50, -30, -30, -30, -30, -30, -30, -50},
 }
+var zobristTable [12][64] uint64 
+
+func randomUnit64() uint64 {
+	var buf[8] byte
+	_,_=rand.Read(buf[:])
+	return binary.LittleEndian.Uint64(buf[:])
+}
+
+func InitZobrist(){
+	for p:=0;p<12;p++{
+		for sq:=0;sq<64;sq++{
+			zobristTable[p][sq]=randomUnit64()
+		}
+	}
+}
+
+var	pieceToIndex:=map[rune]int{
+    'P':0,'N':1,'B':2,'R':3,'Q':4,'K':5,
+    'p':6,'n':7,'b':8,'r':9,'q':10,'k':11,
+}
+
+func GetZobristValue(board[8][8] rune) uint64{
+	var hash uint64=0
+	for row:=0;row<8;row++{
+		for col:=0;col<8;col++{
+			piece:=board[row][col]
+			if piece=='.'{
+				continue
+			}
+			pieceIndex:=pieceToIndex[piece]
+			squareIndex:=row*8+col
+			hash^=zobristTable[pieceIndex][squareIndex]
+		}
+	}
+
+	return hash 
+}
+
+func UpdateHash(board [8][8] rune,bestMove Move){
+	
+}
+
+
+
 func GetValue(piece rune) int {
 	return PieceValues[piece]
 }

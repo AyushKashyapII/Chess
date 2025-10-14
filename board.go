@@ -166,6 +166,7 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 			performCastling(fromRow, fromCol, toRow, toCol, piece)
 			//parsedBoard[toRow][toCol]=parsedBoard[fromRow][fromCol]
 			//parsedBoard[fromRow][fromCol]=0
+
 			if !whiteTurn{
 				bestMove:=handlers.FindBestMove(parsedBoard,whiteTurn)
 				movePiece(bestMove.FromRow,bestMove.FromCol,bestMove.ToRow,bestMove.ToCol)
@@ -275,6 +276,7 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 	}
 	whiteTurn=!whiteTurn
 	pieceSelected=false
+	
 	updateBoardUI(fromRow, fromCol, toRow, toCol)
 	
 		for i := 0; i < 8; i++ {
@@ -488,6 +490,7 @@ func main() {
 	verbose=flag.Bool("verbose",false,"enable verbose output")
 	flag.Parse()
 	log.SetFlags(0)
+	handlers.InitZobrist()
 	if *verbose{
 		log.Println("Verbose mode enabled.")
 	}
