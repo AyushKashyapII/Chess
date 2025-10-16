@@ -12,12 +12,12 @@ type CastlingRights struct {
 	BlackQueenSide bool
 }
 
-type HashMap struct {
-	Hash uint64
-	Score int
-	Depth int
-	BestMove Move
-}
+// type HashMap struct {
+// 	Hash uint64
+// 	Score int
+// 	Depth int
+// 	BestMove Move
+// }
 
 type Move struct {
 	FromRow,FromCol int
@@ -348,27 +348,44 @@ func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
 	var beta=10000
 
 	allMoves:=GenereateAllMoves(board,isWhiteTurn)
-	if len(allMoves)==0 {
+	if len(allMoves)==0{
 		fmt.Println("U have lost MINIMAX")
 	}
-	
-	//fmt.Println("hit 1")
+
+	initial_hash:=GetZobristValue(board)
+	index:=initial_hash & (ttSize-1)
+	entry:=&transpositionTable[index]
+	if entry.HashKey==initial_hash && entry.Depth>=3 {
+		fmt.Println("hash found in the databse using it ")
+		return transpositionTable[index].BestMove
+	}
+	//if initial_hash exists and also tht depth >=3 then retrurn 
+	var max_hash uint64
 	for _,move := range allMoves {
 		//fmt.Println(move)
 		tempBoard:=board
 		piece:=tempBoard[move.FromRow][move.FromCol]
 		tempBoard[move.ToRow][move.ToCol]=piece
 		tempBoard[move.FromRow][move.FromCol]=0
-
-		score:=Minimax(tempBoard,depth,!isWhiteTurn,alpha,beta)
+		new_hash:=GetZobristValue(tempBoard)
+		//if new hash exist then starigh return score and contnue otherwise make minimax xall 
+		score:=Minimax(tempBoard,depth,!isWhiteTurn,alpha,beta,new_hash)
 
 		if score<bestScore{
 			bestScore=score
 			bestMove=move
+			max_hash=new_hash
 		}
 	}
-	hash:=GetZobristValue(board)
 
+	learnedInfo:=HashMap{
+		HashKey:max_hash,
+		Score:bestScore,
+		Depth:3,
+		BestMove:bestMove,
+	}
+
+	transpositionTable[index]=learnedInfo
 	return bestMove
 }
 
@@ -425,7 +442,8 @@ func QuiescenceSearch(board [8][8] rune,isWhiteTurn bool,alpha,beta int) int {
 	}
 }
 
-func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int) int{
+func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int,current_hash uint64) int{
+	
 	if depth==0 {
 		return QuiescenceSearch(board,isWhiteTurn,alpha,beta)
 	}
@@ -437,8 +455,21 @@ func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int) int
 			piece:=tempBoard[move.FromRow][move.FromCol]
 			tempBoard[move.ToRow][move.ToCol]=piece
 			tempBoard[move.FromRow][move.FromCol]=0
-
-			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta)
+			new_hash:=GetZobristValue(tempBoard)
+			new_index:=new_hash & (ttSize-1)
+			//new_index:=new_hash
+			entry:=&transpositionTable[new_index]
+			if entry.HashKey==new_hash && entry.Depth>=depth-1{
+				score:=transpositionTable[new_index].Score
+				alpha=max(alpha,score)
+				best_white_score=max(score,best_white_score)
+				if alpha>=beta{
+					break
+				}
+				fmt.Println("using hash value in minimax in isWHite turen ")
+				continue
+			}
+			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta,new_hash)
 			alpha=max(alpha,score)
 			best_white_score=max(score,best_white_score)
 			if(alpha>=beta){
@@ -450,13 +481,26 @@ func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int) int
 	} else {
 		allMoves:=GenereateAllMoves(board,isWhiteTurn)
 		best_black_score:=100000
-		//fmt.Println("hitting minimax black turn ")
+		var bestMove Move
 		for _,move:=range allMoves {
 			tempBoard:=board
 			piece:=tempBoard[move.FromRow][move.FromCol]
 			tempBoard[move.ToRow][move.ToCol]=piece
 			tempBoard[move.FromRow][move.FromCol]=0
-			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta)
+			new_hash:=GetZobristValue(tempBoard)
+			new_index:=new_hash & (ttSize-1)
+			entry:=&transpositionTable[new_index]
+			if entry.HashKey==new_hash && entry.Depth>=depth-1{
+				score:=transpositionTable[new_index].Score
+				beta=min(beta,score)
+				best_black_score=max(score,best_black_score)
+				if alpha>=beta{
+					break
+				}
+				fmt.Println("using hash vlaue in minimax in black turn ")
+				continue
+			}
+			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta,new_hash)
 			beta=min(beta,score)
 			best_black_score=min(score,best_black_score)
 			if alpha>=beta{
@@ -464,6 +508,13 @@ func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int) int
 			}
 
 		}
+		new_info:=HashMap{
+				HashKey:new_hash,
+				Score:best_black_score,
+				Depth:depth,
+				BestMove:bestMove,
+		}
+		transpositionTable[current_hash& (ttSize-1)]=new_info
 		return best_black_score
 	}
 }

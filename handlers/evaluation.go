@@ -3,19 +3,23 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 )
 
-type Move struct {
-	FromRow,FromCol int
-	ToRow,ToCol int
-}
+// type Move struct {
+// 	FromRow,FromCol int
+// 	ToRow,ToCol int
+// }
 
 type HashMap struct {
-	Hash uint64
+	HashKey uint64
 	Score int
 	Depth int
 	BestMove Move
 }
+
+const ttSize=1048576
+var transpositionTable [ttSize] HashMap
 
 var WhitePawnPST = [8][8]int{
 	{0, 0, 0, 0, 0, 0, 0, 0},
@@ -106,6 +110,7 @@ var WhiteKingEndgamePST = [8][8]int{
 	{-50, -30, -30, -30, -30, -30, -30, -50},
 }
 var zobristTable [12][64] uint64 
+var current_hash uint64
 
 func randomUnit64() uint64 {
 	var buf[8] byte
@@ -119,9 +124,10 @@ func InitZobrist(){
 			zobristTable[p][sq]=randomUnit64()
 		}
 	}
+	fmt.Println("Zobrist Table Initialised!!!")
 }
 
-var	pieceToIndex:=map[rune]int{
+var	pieceToIndex=map[rune]int{
     'P':0,'N':1,'B':2,'R':3,'Q':4,'K':5,
     'p':6,'n':7,'b':8,'r':9,'q':10,'k':11,
 }
@@ -139,15 +145,20 @@ func GetZobristValue(board[8][8] rune) uint64{
 			hash^=zobristTable[pieceIndex][squareIndex]
 		}
 	}
-
+	current_hash=hash
 	return hash 
 }
 
-func UpdateHash(board [8][8] rune,bestMove Move){
-	
+func GetCurrentHash() uint64{
+	return current_hash
 }
 
-
+func UpdateHash(bestMove Move,board[8][8] rune){
+	current_hash_now:=GetCurrentHash()
+	piece:=board[bestMove.FromRow][bestMove.FromCol]
+	current_hash_now^=zobristTable[piece][bestMove.FromRow*8+bestMove.FromCol]
+	current_hash^=zobristTable[piece][bestMove.ToRow*8+bestMove.ToCol]
+}
 
 func GetValue(piece rune) int {
 	return PieceValues[piece]
