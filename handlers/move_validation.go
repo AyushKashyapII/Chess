@@ -360,26 +360,26 @@ func FindBestMove(board[8][8] rune,isWhiteTurn bool) Move{
 		return transpositionTable[index].BestMove
 	}
 	//if initial_hash exists and also tht depth >=3 then retrurn 
-	var max_hash uint64
+	//var max_hash uint64
 	for _,move := range allMoves {
 		//fmt.Println(move)
 		tempBoard:=board
 		piece:=tempBoard[move.FromRow][move.FromCol]
 		tempBoard[move.ToRow][move.ToCol]=piece
 		tempBoard[move.FromRow][move.FromCol]=0
-		new_hash:=GetZobristValue(tempBoard)
+		new_hash := UpdateHashForMove(initial_hash, move, board)
 		//if new hash exist then starigh return score and contnue otherwise make minimax xall 
 		score:=Minimax(tempBoard,depth,!isWhiteTurn,alpha,beta,new_hash)
 
 		if score<bestScore{
 			bestScore=score
 			bestMove=move
-			max_hash=new_hash
+			//max_hash=new_hash
 		}
 	}
 
 	learnedInfo:=HashMap{
-		HashKey:max_hash,
+		HashKey:initial_hash,
 		Score:bestScore,
 		Depth:3,
 		BestMove:bestMove,
@@ -420,7 +420,7 @@ func QuiescenceSearch(board [8][8] rune,isWhiteTurn bool,alpha,beta int) int {
 		piece:=tempBoard[move.FromRow][move.FromCol]
 		tempBoard[move.ToRow][move.ToCol]=piece
 		tempBoard[move.FromRow][move.FromCol]=0
-		score:=QuiescenceSearch(board,!isWhiteTurn,alpha,beta)
+		score:=QuiescenceSearch(tempBoard,!isWhiteTurn,alpha,beta)
 		if isWhiteTurn{
 			if score>alpha{
 				alpha=score
@@ -442,79 +442,107 @@ func QuiescenceSearch(board [8][8] rune,isWhiteTurn bool,alpha,beta int) int {
 	}
 }
 
-func Minimax(board[8][8] rune,depth int,isWhiteTurn bool,alpha int,beta int,current_hash uint64) int{
-	
-	if depth==0 {
-		return QuiescenceSearch(board,isWhiteTurn,alpha,beta)
+func Minimax(board [8][8]rune, depth int, isWhiteTurn bool, alpha int, beta int, current_hash uint64) int {
+
+	index := current_hash & (ttSize - 1)
+	entry := &transpositionTable[index]
+
+	if entry.HashKey == current_hash && entry.Depth >= depth {
+		return entry.Score
 	}
-	if isWhiteTurn{
-		allMoves:=GenereateAllMoves(board,isWhiteTurn)
-		best_white_score:=-100000
-		for _,move:=range allMoves {
-			tempBoard:=board
-			piece:=tempBoard[move.FromRow][move.FromCol]
-			tempBoard[move.ToRow][move.ToCol]=piece
-			tempBoard[move.FromRow][move.FromCol]=0
-			new_hash:=GetZobristValue(tempBoard)
-			new_index:=new_hash & (ttSize-1)
-			//new_index:=new_hash
-			entry:=&transpositionTable[new_index]
-			if entry.HashKey==new_hash && entry.Depth>=depth-1{
-				score:=transpositionTable[new_index].Score
-				alpha=max(alpha,score)
-				best_white_score=max(score,best_white_score)
-				if alpha>=beta{
-					break
+
+	if depth == 0 {
+		return QuiescenceSearch(board, isWhiteTurn, alpha, beta)
+	}
+
+	allMoves := GenereateAllMoves(board, isWhiteTurn)
+	if len(allMoves) == 0 {
+		return -99999
+	}
+
+	var bestMove Move
+	var bestScore int
+
+	if isWhiteTurn {
+		bestScore = -100000
+		for _, move := range allMoves {
+			var tempBoard [8][8]rune
+			for i := 0; i < 8; i++ {
+				for j := 0; j < 8; j++ {
+					tempBoard[i][j] = board[i][j]
 				}
-				fmt.Println("using hash value in minimax in isWHite turen ")
-				continue
-			}
-			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta,new_hash)
-			alpha=max(alpha,score)
-			best_white_score=max(score,best_white_score)
-			if(alpha>=beta){
-				break
 			}
 
+			new_hash := UpdateHashForMove(current_hash, move, board)
+			makeMove(&tempBoard, move)
+
+			score := Minimax(tempBoard, depth-1, !isWhiteTurn, alpha, beta, new_hash)
+
+			if score > bestScore {
+				bestScore = score
+				bestMove = move
+			}
+			if score > alpha {
+				alpha = score
+			}
+			if alpha >= beta {
+				break
+			}
 		}
-		return best_white_score
 	} else {
-		allMoves:=GenereateAllMoves(board,isWhiteTurn)
-		best_black_score:=100000
-		var bestMove Move
-		for _,move:=range allMoves {
-			tempBoard:=board
-			piece:=tempBoard[move.FromRow][move.FromCol]
-			tempBoard[move.ToRow][move.ToCol]=piece
-			tempBoard[move.FromRow][move.FromCol]=0
-			new_hash:=GetZobristValue(tempBoard)
-			new_index:=new_hash & (ttSize-1)
-			entry:=&transpositionTable[new_index]
-			if entry.HashKey==new_hash && entry.Depth>=depth-1{
-				score:=transpositionTable[new_index].Score
-				beta=min(beta,score)
-				best_black_score=max(score,best_black_score)
-				if alpha>=beta{
-					break
+		bestScore = 100000
+		for _, move := range allMoves {
+			var tempBoard [8][8]rune
+			for i := 0; i < 8; i++ {
+				for j := 0; j < 8; j++ {
+					tempBoard[i][j] = board[i][j]
 				}
-				fmt.Println("using hash vlaue in minimax in black turn ")
-				continue
-			}
-			score:=Minimax(tempBoard,depth-1,!isWhiteTurn,alpha,beta,new_hash)
-			beta=min(beta,score)
-			best_black_score=min(score,best_black_score)
-			if alpha>=beta{
-				break
 			}
 
+			new_hash := UpdateHashForMove(current_hash, move, board)
+			makeMove(&tempBoard, move)
+
+			score := Minimax(tempBoard, depth-1, !isWhiteTurn, alpha, beta, new_hash)
+
+			if score < bestScore {
+				bestScore = score
+				bestMove = move
+			}
+			if score < beta {
+				beta = score
+			}
+			if alpha >= beta {
+				break
+			}
 		}
-		new_info:=HashMap{
-				HashKey:new_hash,
-				Score:best_black_score,
-				Depth:depth,
-				BestMove:bestMove,
-		}
-		transpositionTable[current_hash& (ttSize-1)]=new_info
-		return best_black_score
 	}
+
+	entry.HashKey = current_hash
+	entry.Score = bestScore
+	entry.Depth = depth
+	entry.BestMove = bestMove
+
+	return bestScore
+}
+
+
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func makeMove(tempBoard *[8][8]rune, move Move) {
+	piece := (*tempBoard)[move.FromRow][move.FromCol]
+	(*tempBoard)[move.ToRow][move.ToCol] = piece
+	(*tempBoard)[move.FromRow][move.FromCol] = 0
 }

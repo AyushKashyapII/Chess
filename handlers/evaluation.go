@@ -18,7 +18,7 @@ type HashMap struct {
 	BestMove Move
 }
 
-const ttSize=1048576
+const ttSize=512
 var transpositionTable [ttSize] HashMap
 
 var WhitePawnPST = [8][8]int{
@@ -153,11 +153,30 @@ func GetCurrentHash() uint64{
 	return current_hash
 }
 
-func UpdateHash(bestMove Move,board[8][8] rune){
-	current_hash_now:=GetCurrentHash()
-	piece:=board[bestMove.FromRow][bestMove.FromCol]
-	current_hash_now^=zobristTable[piece][bestMove.FromRow*8+bestMove.FromCol]
-	current_hash^=zobristTable[piece][bestMove.ToRow*8+bestMove.ToCol]
+func UpdateHashForMove(currentHash uint64, move Move, board [8][8]rune) uint64 {
+	newHash := currentHash
+	
+	fromPiece := board[move.FromRow][move.FromCol]
+	if fromPiece != '.' && fromPiece != 0 {
+		pieceIdx := pieceToIndex[fromPiece]
+		fromSquare := move.FromRow*8 + move.FromCol
+		newHash ^= zobristTable[pieceIdx][fromSquare]
+	}
+	
+	toPiece := board[move.ToRow][move.ToCol]
+	if toPiece != '.' && toPiece != 0 {
+		pieceIdx := pieceToIndex[toPiece]
+		toSquare := move.ToRow*8 + move.ToCol
+		newHash ^= zobristTable[pieceIdx][toSquare]
+	}
+	
+	if fromPiece != '.' && fromPiece != 0 {
+		pieceIdx := pieceToIndex[fromPiece]
+		toSquare := move.ToRow*8 + move.ToCol
+		newHash ^= zobristTable[pieceIdx][toSquare]
+	}
+	
+	return newHash
 }
 
 func GetValue(piece rune) int {
