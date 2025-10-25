@@ -1,8 +1,5 @@
 # Go Chess Engine
 
-![Go Chess Engine Screenshot](./docs/screenshot.png)
-*(To add a screenshot: create a `docs` folder, put a `screenshot.png` file in it, and this link will work automatically.)*
-
 ## 📖 About The Project
 
 This project is a classic chess engine built from the ground up in the **Go** programming language. It started as a personal learning journey to master Go's fundamentals and has evolved from a simple Fyne-based desktop application into a fully-fledged web application.
