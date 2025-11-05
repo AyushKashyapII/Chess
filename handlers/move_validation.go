@@ -24,16 +24,14 @@ type Move struct {
 	ToRow,ToCol int
 }
 
-
-
-var initialPositions = map[string]bool{
-	"e1": true,
-	"e8": true, 
-	"a1": true,
-	"h1": true, 
-	"a8": true, 
-	"h8": true, 
-}
+// var initialPositions = map[string]bool{
+// 	"e1": true,
+// 	"e8": true, 
+// 	"a1": true,
+// 	"h1": true, 
+// 	"a8": true, 
+// 	"h8": true, 
+// }
 
 func UpdateCastlingRights(board [8][8]rune, fromRow, fromCol int, castlingRights *CastlingRights) {
 	piece := board[fromRow][fromCol]
@@ -67,8 +65,17 @@ func IsSquareUnderAttack(board [8][8]rune, row, col int, isWhitePiece bool) bool
 			if piece == 0 || isWhite(piece) == isWhitePiece {
 				continue
 			}
-			if IsValidMove(board, piece, i, j, row, col, nil) {
-				return true
+			// if IsValidMove(board, piece, i, j, row, col, nil) {
+			// 	return true
+			// }
+			if piece=='K' || piece=='k'{
+				if abs(i-row)<=1 && abs(j-col)<=1{
+					return true
+				}
+			}else{
+				if IsValidMove(board,piece,i,j,row,col,nil){
+					return true
+				}
 			}
 		}
 	}
@@ -527,19 +534,19 @@ func Minimax(board [8][8]rune, depth int, isWhiteTurn bool, alpha int, beta int,
 
 
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
+// func max(a, b int) int {
+// 	if a > b {
+// 		return a
+// 	}
+// 	return b
+// }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// func min(a, b int) int {
+// 	if a < b {
+// 		return a
+// 	}
+// 	return b
+// }
 
 func makeMove(tempBoard *[8][8]rune, move Move) {
 	piece := (*tempBoard)[move.FromRow][move.FromCol]

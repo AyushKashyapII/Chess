@@ -38,8 +38,8 @@ var whiteTurn = true
 
 var boardContainer *fyne.Container
 var boardCells [8][8]*fyne.Container
-var blackScore = 1290
-var whiteScore = 1290
+//var blackScore = 1290
+//var whiteScore = 1290
 
 type KingPosition struct {
 	Row     int
@@ -50,18 +50,18 @@ type KingPosition struct {
 var whiteKing = KingPosition{Row: 7, Col: 4, IsCheck: false}
 var blackKing = KingPosition{Row: 0, Col: 4, IsCheck: false}
 
-func getBlackPieces() [][2]int {
-	var positions [][2]int
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 8; j++ {
-			piece := parsedBoard[i][j]
-			if piece >= 'a' && piece <= 'z' {
-				positions = append(positions, [2]int{i, j})
-			}
-		}
-	}
-	return positions
-}
+// func getBlackPieces() [][2]int {
+// 	var positions [][2]int
+// 	for i := 0; i < 8; i++ {
+// 		for j := 0; j < 8; j++ {
+// 			piece := parsedBoard[i][j]
+// 			if piece >= 'a' && piece <= 'z' {
+// 				positions = append(positions, [2]int{i, j})
+// 			}
+// 		}
+// 	}
+// 	return positions
+// }
 
 func handlePieceClick(row, col int){
 	clickedPiece:=parsedBoard[row][col]
@@ -183,13 +183,13 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 		return
 	}
 
-	if targetPiece != 0 {
-		if isWhitePiece {
-			blackScore -= handlers.GetValue(targetPiece)
-		} else {
-			whiteScore -= handlers.GetValue(targetPiece)
-		}
-	}
+	// if targetPiece != 0 {
+	// 	if isWhitePiece {
+	// 		blackScore -= handlers.GetValue(targetPiece)
+	// 	} else {
+	// 		whiteScore -= handlers.GetValue(targetPiece)
+	// 	}
+	// }
 	if !isPathClear(fromRow, fromCol, toRow, toCol) {
 		fmt.Println("Path is blocked for piece:", string(piece))
 		return
@@ -218,11 +218,19 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 		kingToCheck = &blackKing
 		opponentKing = &whiteKing
 	}
-	if piece == 'K' {
-		whiteKing.Row, whiteKing.Col = toRow, toCol
-	} else if piece == 'k' {
+	// if piece == 'K' {
+	// 	whiteKing.Row, whiteKing.Col = toRow, toCol
+	// } else if piece == 'k' {
+	// 	blackKing.Row, blackKing.Col = toRow, toCol
+	// }
+
+	switch piece{
+	case 'K':
+		whiteKing.Row,whiteKing.Col=toRow,toCol
+	case 'k':
 		blackKing.Row, blackKing.Col = toRow, toCol
 	}
+	
 	if whiteKing.IsCheck && whiteTurn {
 		if !handlers.IsSquareUnderAttack(parsedBoard, whiteKing.Row, whiteKing.Col, true) {
 			whiteKing.IsCheck = false
@@ -242,10 +250,17 @@ func movePiece(fromRow, fromCol, toRow, toCol int) {
 	parsedBoard[toRow][toCol] = piece
 	parsedBoard[fromRow][fromCol] = 0
 
-	if piece == 'K' {
-		whiteKing.Row, whiteKing.Col = toRow, toCol
-	} else if piece == 'k' {
-		blackKing.Row, blackKing.Col = toRow, toCol
+	// if piece == 'K' {
+	// 	whiteKing.Row, whiteKing.Col = toRow, toCol
+	// } else if piece == 'k' {
+	// 	blackKing.Row, blackKing.Col = toRow, toCol
+	// }
+
+	switch piece{
+	case 'K':
+		whiteKing.Row,whiteKing.Col=toRow,toCol
+	case 'k':
+		blackKing.Row,blackKing.Col=toRow,toCol
 	}
 
 	if handlers.IsSquareUnderAttack(parsedBoard, opponentKing.Row, opponentKing.Col, !isWhitePiece) {
