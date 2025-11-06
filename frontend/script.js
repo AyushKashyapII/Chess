@@ -1,10 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Elements ---
     const boardElement = document.getElementById('board');
     const statusElement = document.getElementById('status');
     const restartButton = document.getElementById('restart-button');
-
-    // --- Piece Image Mapping ---
     const pieceImageFiles = {
         'P': 'pieces/whitePawn.svg', 'N': 'pieces/whiteKnight.svg', 
         'B': 'pieces/whiteBishop.svg', 'R': 'pieces/whiteRook.svg', 
@@ -17,6 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let boardState = [];
     let fromSquare = null;
     let isAwaitingAi = false;
+    let isGameOver=false;
+    let blackKingCheck=false;
+    let whiteKingCheck=false;
 
     function handleSquareClick(row, col) {
         console.log('Clicked:', row, col);
@@ -28,8 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const clickedPiece = boardState[row][col];
         const isWhitePiece = clickedPiece !== ' ' && clickedPiece === clickedPiece.toUpperCase();
-
-        // No piece selected yet
         if (fromSquare === null) {
             if (isWhitePiece) {
                 fromSquare = { row, col };
@@ -38,8 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
-
-        // Double-click on same square to deselect
         if (fromSquare.row === row && fromSquare.col === col) {
             console.log('Deselecting piece');
             fromSquare = null;
@@ -50,16 +46,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedPiece = boardState[fromSquare.row][fromSquare.col];
         const targetPiece = boardState[row][col];
         const isTargetWhite = targetPiece !== ' ' && targetPiece === targetPiece.toUpperCase();
-
-        // Can't capture your own piece - allow re-selection instead
         if (targetPiece !== ' ' && isWhitePiece && isTargetWhite) {
             fromSquare = { row, col };
             console.log('Re-selected different piece at:', row, col);
             updateUi();
             return;
         }
-
-        // Attempt the move
         const move = {
             FromRow: fromSquare.row,
             FromCol: fromSquare.col,
@@ -93,21 +85,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (result.valid) {
                 console.log('Move is valid! Executing...');
-                
-                // Make the move on the board
-                makeMove(move);
-                
-                // Log the new state
+                if (result.newFen) {
+                    console.log('Using server FEN:', result.newFen);
+                    boardState = fenToBoard(result.newFen);
+                } else {
+                    makeMove(move);
+                }
                 const fenAfter = boardToFen();
                 console.log('FEN after move:', fenAfter);
-                
-                // Deselect piece
                 fromSquare = null;
-                
-                // Update UI immediately
                 updateUi();
-                
-                // Get AI response after a short delay
                 setTimeout(() => {
                     console.log('Requesting AI move...');
                     getAiMove();
@@ -146,13 +133,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const aiMove = await response.json();
             console.log('AI move received:', aiMove);
             
-            if (aiMove && aiMove.FromRow !== undefined) {
-                makeMove(aiMove);
-                const fenAfter = boardToFen();
-                console.log('FEN after AI move:', fenAfter);
+            if (aiMove && aiMove.valid) {
+                if (aiMove.newFen) {
+                    console.log('Using AI FEN:', aiMove.newFen);
+                    boardState = fenToBoard(aiMove.newFen);
+                    const fenAfter = boardToFen();
+                    console.log('FEN after AI move:', fenAfter);
+                } else {
+                    console.log('No newFen in AI response, game over?');
+                    statusElement.textContent = 'Game Over!';
+                    isGameOver=true
+                }
             } else {
                 console.log('No AI move - game over?');
                 statusElement.textContent = 'Game Over!';
+                isGameOver=true
+                //return
             }
 
         } catch (error) {
@@ -181,7 +177,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 square.dataset.row = r;
                 square.dataset.col = c;
 
-                // Highlight selected square
                 if (fromSquare && fromSquare.row === r && fromSquare.col === c) {
                     square.classList.add('selected');
                 }
@@ -203,7 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateStatus() {
-        if (isAwaitingAi) {
+        if(isGameOver){
+            statusElement.textContent="Game Over!!!"
+        }else if (isAwaitingAi) {
             statusElement.textContent = 'Black is thinking...';
         } else {
             statusElement.textContent = 'White to move';

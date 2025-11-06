@@ -26,82 +26,147 @@ type ValidateRequest struct {
 	Move Move   `json:"move"`
 }
 
+type ValidateResponse struct {
+	Valid  bool   `json:"valid"`
+	NewFen string `json:"newFen,omitempty"`
+}
+
 func main() {
-	fmt.Println(("CHESS ENGINE!!!"))
+	fmt.Println("CHESS ENGINE!!!")
 	handlers.InitZobrist()
 	http.HandleFunc("/get_move", handleGetMove)
 	http.HandleFunc("/validate_move", validate_move)
 	http.Handle("/", http.FileServer(http.Dir("./frontend")))
 
-	port := os.Getenv(("PORT"))
+	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	fmt.Printf("Starting the chess engine at port %s", port)
+	fmt.Printf("Starting the chess engine at port %s\n", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("getting here ")
-
 }
 
 func handleGetMove(w http.ResponseWriter, r *http.Request) {
 	var request MoveRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Error: Invalid request formayt ", http.StatusBadRequest)
+		http.Error(w, "Error: Invalid request format", http.StatusBadRequest)
 		return
 	}
 
-	fmt.Println("Recievdd FEN from client:", request.Fen)
+	fmt.Println("Received FEN from client:", request.Fen)
 	board := parseFEN(request.Fen)
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 8; j++ {
-			fmt.Print(string(board[i][j]))
-		}
-		fmt.Println()
-	}
-	//generatetry(board,false)
+	// for i := 0; i < 8; i++ {
+	// 	for j := 0; j < 8; j++ {
+	// 		if board[i][j] == 0 {
+	// 			fmt.Print(".")
+	// 		} else {
+	// 			fmt.Print(string(board[i][j]))
+	// 		}
+	// 	}
+	// 	fmt.Println()
+	// }
 
 	bestMove := handlers.FindBestMove(board, false)
-	fmt.Printf("Engine chose to move from (%d,%d) to (%d,%d)", bestMove.FromRow, bestMove.FromCol, bestMove.ToRow, bestMove.ToCol)
+	fmt.Printf("Engine chose to move from (%d,%d) to (%d,%d)\n",
+		bestMove.FromRow, bestMove.FromCol, bestMove.ToRow, bestMove.ToCol)
+	if bestMove.FromRow == 0 && bestMove.FromCol == 0 &&
+		bestMove.ToRow == 0 && bestMove.ToCol == 0 {
+		fmt.Println("WARNING: AI returned no move (all zeros)")
+		response := ValidateResponse{
+			Valid:  false,
+			NewFen: request.Fen,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	aiMove := Move{
+		FromRow: bestMove.FromRow,
+		FromCol: bestMove.FromCol,
+		ToRow:   bestMove.ToRow,
+		ToCol:   bestMove.ToCol,
+	}
+	fmt.Println("ai move response", aiMove)
+	newBoard := applyMove(board, aiMove)
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(bestMove); err != nil {
-		log.Printf("Error encoding response: %v", err)
+	
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			if newBoard[i][j] == 0 || newBoard[i][j] == ' ' {
+				fmt.Print(". ")
+			} else {
+				fmt.Printf("%c ", newBoard[i][j])
+			}
+		}
+		fmt.Println("")
 	}
 
+
+	response := ValidateResponse{
+		Valid:  true,
+		NewFen: boardToFEN(newBoard),
+	}
+
+	fmt.Println("AI move new FEN:", response.NewFen)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding response: %v", err)
+	}
 }
 
 func validate_move(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
 	var data ValidateRequest
-	json.NewDecoder(r.Body).Decode(&data)
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
 	fmt.Println("request validate move:", data.Move)
-	fmt.Println("request fen ", data.Fen)
+	fmt.Println("request fen:", data.Fen)
+
 	parsedBoard := parseFEN(data.Fen)
-	valid := handlers.IsValidMove(parsedBoard, parsedBoard[data.Move.FromRow][data.Move.FromCol], data.Move.FromRow, data.Move.FromCol, data.Move.ToRow, data.Move.ToCol, nil)
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			fmt.Print(string(parsedBoard[i][j]))
+		}
+		fmt.Println()
+	}
+	valid := handlers.IsValidMove(
+		parsedBoard,
+		parsedBoard[data.Move.FromRow][data.Move.FromCol],
+		data.Move.FromRow,
+		data.Move.FromCol,
+		data.Move.ToRow,
+		data.Move.ToCol,
+		nil,
+	)
 
-	json.NewEncoder(w).Encode(map[string]bool{"valid": valid})
+	fmt.Println("valid ", valid)
+	//fmt.Println("fen rece",data.Fen)
+
+	response := ValidateResponse{
+		Valid:  valid,
+		NewFen: data.Fen,
+	}
+
+	if valid {
+		newBoard := applyMove(parsedBoard, data.Move)
+		response.NewFen = boardToFEN(newBoard)
+		fmt.Println("Move is valid!")
+		fmt.Println("new FEN:", response.NewFen)
+	} else {
+		fmt.Println("Move is INVALID")
+	}
+
+	fmt.Println("Sending response:", response)
+	json.NewEncoder(w).Encode(response)
 }
-
-// func generatetry(board [8][8] rune,isWhiteTurn bool) {
-// 	if isWhiteTurn {
-// 		fmt.Print("WHite tuen ")
-// 	}else{
-// 		fmt.Print(("Black turn "))
-// 	}
-// 	for i:=0;i<8;i++{
-// 		for j:=0;j<8;j++{
-// 			var piec=board[i][j]
-// 			if piec=="."{
-// 				fmt.Print(" ")
-// 			}else{
-// 				fmt.Print(string(piec))
-// 			}
-// 		}
-// 	}
-// }
 
 func parseFEN(fen string) [8][8]rune {
 	var board [8][8]rune
@@ -120,4 +185,80 @@ func parseFEN(fen string) [8][8]rune {
 	}
 
 	return board
+}
+
+func applyMove(board [8][8]rune, move Move) [8][8]rune {
+	var newBoard [8][8]rune
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			newBoard[i][j] = board[i][j]
+		}
+	}
+	
+	piece := board[move.FromRow][move.FromCol]
+	newBoard[move.FromRow][move.FromCol] = ' '
+	
+	if piece == 'K' || piece == 'k' {
+		if abs(move.ToCol-move.FromCol) == 2 {
+			if move.ToCol > move.FromCol { 
+				newBoard[move.FromRow][5] = newBoard[move.FromRow][7]
+				newBoard[move.FromRow][7] = ' '
+			} else { 
+				newBoard[move.FromRow][3] = newBoard[move.FromRow][0]
+				newBoard[move.FromRow][0] = ' '
+			}
+		}
+	}
+	if (piece == 'P' || piece == 'p') && move.ToCol != move.FromCol {
+		if board[move.ToRow][move.ToCol] == ' ' || board[move.ToRow][move.ToCol] == 0 {
+			newBoard[move.FromRow][move.ToCol] = ' '
+		}
+	}
+	newBoard[move.ToRow][move.ToCol] = piece
+	if piece == 'P' && move.ToRow == 0 {
+		newBoard[move.ToRow][move.ToCol] = 'Q'
+	} else if piece == 'p' && move.ToRow == 7 {
+		newBoard[move.ToRow][move.ToCol] = 'q'
+	}
+
+	return newBoard
+}
+
+func boardToFEN(board [8][8]rune) string {
+	var fen strings.Builder
+
+	for row := 0; row < 8; row++ {
+		emptyCount := 0
+
+		for col := 0; col < 8; col++ {
+			piece := board[row][col]
+
+			if piece == ' ' || piece == 0 {
+				emptyCount++
+			} else {
+				if emptyCount > 0 {
+					fen.WriteString(fmt.Sprintf("%d", emptyCount))
+					emptyCount = 0
+				}
+				fen.WriteRune(piece)
+			}
+		}
+
+		if emptyCount > 0 {
+			fen.WriteString(fmt.Sprintf("%d", emptyCount))
+		}
+
+		if row < 7 {
+			fen.WriteString("/")
+		}
+	}
+
+	return fen.String()
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
