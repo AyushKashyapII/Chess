@@ -1,5 +1,4 @@
 output.log
-go.mod
 piece_move_logic
 .gitignore
 tmp
