@@ -1,6 +1,6 @@
 output.log
 go.mod
-main.go
 piece_move_logic
 .gitignore
 tmp
+chess-gui
