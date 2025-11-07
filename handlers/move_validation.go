@@ -344,14 +344,22 @@ func GenereateAllMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 			if !isWhiteTurn && isWhite(piece) {
 				continue
 			}
-			for toRow := 0; toRow < 8; toRow++ {
-				for toCol := 0; toCol < 8; toCol++ {
-					if IsValidMove(board, piece, fromRow, fromCol, toRow, toCol, nil) {
-						newMove := Move{FromRow: fromRow, FromCol: fromCol, ToRow: toRow, ToCol: toCol}
-						legalMoves = append(legalMoves, newMove)
-					}
+
+			possibleMoves := getPossibleMoves(piece, fromRow, fromCol)
+			for _, pos := range possibleMoves {
+				toRow, toCol := pos[0], pos[1]
+				if IsValidMove(board, piece, fromRow, fromCol, toRow, toCol, nil) {
+					legalMoves = append(legalMoves, Move{FromRow: fromRow, FromCol: fromCol, ToRow: toRow, ToCol: toCol})
 				}
 			}
+			// for toRow := 0; toRow < 8; toRow++ {
+			// 	for toCol := 0; toCol < 8; toCol++ {
+			// 		if IsValidMove(board, piece, fromRow, fromCol, toRow, toCol, nil) {
+			// 			newMove := Move{FromRow: fromRow, FromCol: fromCol, ToRow: toRow, ToCol: toCol}
+			// 			legalMoves = append(legalMoves, newMove)
+			// 		}
+			// 	}
+			// }
 		}
 	}
 
@@ -362,6 +370,71 @@ func GenereateAllMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 	})
 
 	return legalMoves
+}
+
+func getPossibleMoves(piece rune, fromRow, fromCol int) [][2]int {
+	var moves [][2]int
+
+	switch piece {
+	case 'N', 'n':
+		deltas := [][2]int{{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {2, -1}, {2, 1}}
+		for _, d := range deltas {
+			r, c := fromRow+d[0], fromCol+d[1]
+			if r >= 0 && r < 8 && c >= 0 && c < 8 {
+				moves = append(moves, [2]int{r, c})
+			}
+		}
+
+	case 'K', 'k':
+		for dr := -1; dr <= 1; dr++ {
+			for dc := -1; dc <= 1; dc++ {
+				if dr == 0 && dc == 0 {
+					continue
+				}
+
+				r, c := fromRow+dr, fromCol+dc
+				if r >= 0 && r < 8 && c >= 0 && c < 8 {
+					moves = append(moves, [2]int{r, c})
+				}
+			}
+		}
+		moves = append(moves, [2]int{fromRow, fromCol + 2}, [2]int{fromRow, fromCol - 2})
+
+	case 'P':
+		if fromRow > 0 {
+			moves = append(moves, [2]int{fromRow - 1, fromCol})
+		}
+		if fromRow == 6 {
+			moves = append(moves, [2]int{4, fromCol}, [2]int{5, fromCol})
+		}
+		if fromRow > 0 && fromCol > 0 {
+			moves = append(moves, [2]int{fromRow - 1, fromCol - 1})
+		}
+		if fromRow > 0 && fromCol < 7 {
+			moves = append(moves, [2]int{fromRow - 1, fromCol + 1})
+		}
+	case 'p':
+		if fromRow < 7 {
+			moves = append(moves, [2]int{fromRow + 1, fromCol})
+		}
+		if fromRow == 1 {
+			moves = append(moves, [2]int{3, fromCol})
+		}
+		if fromRow < 7 && fromCol > 0 {
+			moves = append(moves, [2]int{fromRow + 1, fromCol - 1})
+		}
+		if fromRow < 7 && fromCol < 7 {
+			moves = append(moves, [2]int{fromRow + 1, fromCol + 1})
+		}
+	default:
+		for r := 0; r < 8; r++ {
+			for c := 0; c < 8; c++ {
+				moves = append(moves, [2]int{r, c})
+			}
+		}
+
+	}
+	return moves
 }
 
 func GenerateCaptureMoves(board [8][8]rune, isWhiteTurn bool) []Move {
@@ -382,7 +455,7 @@ func GenerateCaptureMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 func FindBestMove(board [8][8]rune, isWhiteTurn bool) Move {
 	var bestMove Move
 	var bestScore = 100000
-	var depth = 5
+	var depth = 3
 	var alpha = -10000
 	var beta = 10000
 	fmt.Println("hit 1 ")

@@ -27,6 +27,7 @@ type ValidateRequest struct {
 }
 
 type ValidateResponse struct {
+	GameStatus bool `json:"gamestatus"`
 	Valid  bool   `json:"valid"`
 	NewFen string `json:"newFen,omitempty"`
 }
@@ -92,7 +93,15 @@ func handleGetMove(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("ai move response", aiMove)
 	newBoard := applyMove(board, aiMove)
 
+	isPossibleMove:=handlers.FindBestMove(newBoard,true)
+	isPossible:=true
+	if isPossibleMove.FromRow == 0 && isPossibleMove.FromCol == 0 &&
+		isPossibleMove.ToRow == 0 && isPossibleMove.ToCol == 0 {
+			isPossible=false
+		}
+
 	response := ValidateResponse{
+		GameStatus: isPossible,
 		Valid:  true,
 		NewFen: boardToFEN(newBoard),
 	}
@@ -135,9 +144,11 @@ func validate_move(w http.ResponseWriter, r *http.Request) {
 	)
 
 	fmt.Println("valid ", valid)
+	isPossible:=true
 	//fmt.Println("fen rece",data.Fen)
 
 	response := ValidateResponse{
+		GameStatus: isPossible,
 		Valid:  valid,
 		NewFen: data.Fen,
 	}

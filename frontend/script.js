@@ -134,14 +134,17 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('AI move received:', aiMove);
             
             if (aiMove && aiMove.valid) {
-                if (aiMove.newFen) {
+                if(!aiMove.gamestatus){
+                    console.log("Game is over user has no more moves left!!!")
+                    statusElement.textContent="Game Over!!!You Lost"
+                }else if (aiMove.newFen) {
                     console.log('Using AI FEN:', aiMove.newFen);
                     boardState = fenToBoard(aiMove.newFen);
                     const fenAfter = boardToFen();
                     console.log('FEN after AI move:', fenAfter);
                 } else {
                     console.log('No newFen in AI response, game over?');
-                    statusElement.textContent = 'Game Over!';
+                    statusElement.textContent = 'Game Over!!You Won';
                     isGameOver=true
                 }
             } else {
