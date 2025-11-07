@@ -58,16 +58,16 @@ func handleGetMove(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("Received FEN from client:", request.Fen)
 	board := parseFEN(request.Fen)
-	// for i := 0; i < 8; i++ {
-	// 	for j := 0; j < 8; j++ {
-	// 		if board[i][j] == 0 {
-	// 			fmt.Print(".")
-	// 		} else {
-	// 			fmt.Print(string(board[i][j]))
-	// 		}
-	// 	}
-	// 	fmt.Println()
-	// }
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			if board[i][j] == 0 || board[i][j] == ' ' {
+				fmt.Print(". ")
+			} else {
+				fmt.Printf("%c ", board[i][j])
+			}
+		}
+		fmt.Println("")
+	}
 
 	bestMove := handlers.FindBestMove(board, false)
 	fmt.Printf("Engine chose to move from (%d,%d) to (%d,%d)\n",
@@ -91,19 +91,6 @@ func handleGetMove(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("ai move response", aiMove)
 	newBoard := applyMove(board, aiMove)
-
-	
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 8; j++ {
-			if newBoard[i][j] == 0 || newBoard[i][j] == ' ' {
-				fmt.Print(". ")
-			} else {
-				fmt.Printf("%c ", newBoard[i][j])
-			}
-		}
-		fmt.Println("")
-	}
-
 
 	response := ValidateResponse{
 		Valid:  true,
@@ -194,16 +181,16 @@ func applyMove(board [8][8]rune, move Move) [8][8]rune {
 			newBoard[i][j] = board[i][j]
 		}
 	}
-	
+
 	piece := board[move.FromRow][move.FromCol]
 	newBoard[move.FromRow][move.FromCol] = ' '
-	
+
 	if piece == 'K' || piece == 'k' {
 		if abs(move.ToCol-move.FromCol) == 2 {
-			if move.ToCol > move.FromCol { 
+			if move.ToCol > move.FromCol {
 				newBoard[move.FromRow][5] = newBoard[move.FromRow][7]
 				newBoard[move.FromRow][7] = ' '
-			} else { 
+			} else {
 				newBoard[move.FromRow][3] = newBoard[move.FromRow][0]
 				newBoard[move.FromRow][0] = ' '
 			}
