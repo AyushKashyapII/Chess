@@ -3,7 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
+	//"fmt"
 )
 
 // type Move struct {
@@ -125,7 +125,7 @@ func InitZobrist() {
 			zobristTable[p][sq] = randomUnit64()
 		}
 	}
-	fmt.Println("Zobrist Table Initialised!!!")
+	//fmt.Println("Zobrist Table Initialised!!!")
 }
 
 var pieceToIndex = map[rune]int{
@@ -138,11 +138,9 @@ func GetZobristValue(board [8][8]rune) uint64 {
 	for row := 0; row < 8; row++ {
 		for col := 0; col < 8; col++ {
 			piece := board[row][col]
-			if pieceToIndex[piece] >= 0 {
-				pieceIndex := pieceToIndex[piece]
+			if pieceIndex, ok := pieceToIndex[piece]; ok {
 				squareIndex := row*8 + col
 				hash ^= zobristTable[pieceIndex][squareIndex]
-				//continue
 			}
 
 		}
@@ -159,21 +157,18 @@ func UpdateHashForMove(currentHash uint64, move Move, board [8][8]rune) uint64 {
 	newHash := currentHash
 
 	fromPiece := board[move.FromRow][move.FromCol]
-	if fromPiece != '.' && fromPiece != 0 {
-		pieceIdx := pieceToIndex[fromPiece]
+	if pieceIdx, ok := pieceToIndex[fromPiece]; ok {
 		fromSquare := move.FromRow*8 + move.FromCol
 		newHash ^= zobristTable[pieceIdx][fromSquare]
 	}
 
 	toPiece := board[move.ToRow][move.ToCol]
-	if toPiece != '.' && toPiece != 0 {
-		pieceIdx := pieceToIndex[toPiece]
+	if pieceIdx, ok := pieceToIndex[toPiece]; ok {
 		toSquare := move.ToRow*8 + move.ToCol
 		newHash ^= zobristTable[pieceIdx][toSquare]
 	}
 
-	if fromPiece != '.' && fromPiece != 0 {
-		pieceIdx := pieceToIndex[fromPiece]
+	if pieceIdx, ok := pieceToIndex[fromPiece]; ok {
 		toSquare := move.ToRow*8 + move.ToCol
 		newHash ^= zobristTable[pieceIdx][toSquare]
 	}

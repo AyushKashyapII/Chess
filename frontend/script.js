@@ -15,8 +15,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let fromSquare = null;
     let isAwaitingAi = false;
     let isGameOver = false;
-    let blackKingCheck = false;
-    let whiteKingCheck = false;
+
+    // Helper to send messages to the worker and return a promise
+    function callWorker(type, payload) {
+        console.log(`Main: Sending ${type}`, payload);
+        return new Promise((resolve) => {
+            const listener = (e) => {
+                if (e.data.type === type + "_RESULT") {
+                    window.chessWorker.removeEventListener("message", listener);
+                    resolve(e.data.payload);
+                }
+            };
+            window.chessWorker.addEventListener("message", listener);
+            window.chessWorker.postMessage({ type, payload });
+        });
+    }
 
     function handleSquareClick(row, col) {
         console.log('Clicked:', row, col);
@@ -66,43 +79,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function validateMove(move) {
-        const fenBefore = boardToFen();
-        console.log('FEN before move:', fenBefore);
-
         try {
-            if (typeof validate_move_wasm !== 'function') {
-                throw new Error("WASM function 'validate_move_wasm' not found. Is it initialized?");
-            }
+            const result = await callWorker("VALIDATE_MOVE", {
+                fromR: move.FromRow,
+                fromC: move.FromCol,
+                toR: move.ToRow,
+                toC: move.ToCol
+            });
 
-            const resultJson = validate_move_wasm(fenBefore, move.FromRow, move.FromCol, move.ToRow, move.ToCol);
-            const result = JSON.parse(resultJson);
+            console.log('Validation result (Worker):', result);
 
-            console.log('Validation result (WASM):', result);
-
-            if (result.valid) {
-                console.log('Move is valid! Executing...');
+            if (result && result.valid) {
                 if (result.newFen) {
-                    console.log('Using WASM FEN:', result.newFen);
                     boardState = fenToBoard(result.newFen);
                 } else {
-                    makeMove(move);
+                    // This branch should ideally not be hit if worker always returns newFen
+                    // but kept for robustness if worker logic changes.
+                    // makeMove(move); // Removed as worker handles board state
                 }
-                const fenAfter = boardToFen();
-                console.log('FEN after move:', fenAfter);
                 fromSquare = null;
                 updateUi();
-                getAiMove();
 
-                isAwaitingAi = false;
+                setTimeout(() => {
+                    getAiMove();
+                }, 100);
             } else {
-                console.log('Move is invalid!');
                 statusElement.textContent = 'Invalid Move! Try again.';
                 isAwaitingAi = false;
                 updateUi();
             }
 
         } catch (error) {
-            console.error('Error during WASM validation:', error);
+            console.error('Error during worker communication:', error);
             statusElement.textContent = 'Error: ' + error.message;
             isAwaitingAi = false;
             fromSquare = null;
@@ -111,44 +119,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function getAiMove() {
-        const fen = boardToFen();
-        console.log('Requesting AI move for FEN:', fen);
+        isAwaitingAi = true;
+        updateStatus();
 
         try {
-            if (typeof get_ai_move_wasm !== 'function') {
-                throw new Error("WASM function 'get_ai_move_wasm' not found. Is it initialized?");
-            }
-
-            const resultJson = get_ai_move_wasm(fen);
-            const aiMove = JSON.parse(resultJson);
-
-            //const aiMove = await response.json();
-            console.log('AI move received:', aiMove);
+            const aiMove = await callWorker("GET_AI_MOVE", {});
+            console.log('AI move received (Worker):', aiMove);
 
             if (aiMove && aiMove.valid) {
                 if (!aiMove.gamestatus) {
-                    console.log("Game is over user has no more moves left!!!")
-                    statusElement.textContent = "Game Over!!!You Lost"
-                } else if (aiMove.newFen) {
-                    console.log('Using AI FEN:', aiMove.newFen);
+                    statusElement.textContent = "Game Over! You Lost";
+                    isGameOver = true;
+                }
+                if (aiMove.newFen) {
                     boardState = fenToBoard(aiMove.newFen);
-                    const fenAfter = boardToFen();
-                    console.log('FEN after AI move:', fenAfter);
-                } else {
-                    console.log('No newFen in AI response, game over?');
-                    statusElement.textContent = 'Game Over!!You Won';
-                    isGameOver = true
                 }
             } else {
-                console.log('No AI move - game over?');
-                statusElement.textContent = 'Game Over!';
-                isGameOver = true
-                //return
+                statusElement.textContent = 'Game Over! You Won';
+                isGameOver = true;
             }
 
         } catch (error) {
             console.error('Error getting AI move:', error);
-            statusElement.textContent = 'Error communicating with engine: ' + error.message;
+            statusElement.textContent = 'Error: ' + error.message;
         } finally {
             isAwaitingAi = false;
             updateUi();
@@ -202,18 +195,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function makeMove(move) {
-        console.log('makeMove called with:', move);
-        console.log('Board before:', JSON.stringify(boardState));
+    // makeMove is no longer needed as the worker handles board state updates via FEN
+    // function makeMove(move) {
+    //     console.log('makeMove called with:', move);
+    //     console.log('Board before:', JSON.stringify(boardState));
 
-        const piece = boardState[move.FromRow][move.FromCol];
-        console.log('Moving piece:', piece, 'from', move.FromRow, move.FromCol, 'to', move.ToRow, move.ToCol);
+    //     const piece = boardState[move.FromRow][move.FromCol];
+    //     console.log('Moving piece:', piece, 'from', move.FromRow, move.FromCol, 'to', move.ToRow, move.ToCol);
 
-        boardState[move.ToRow][move.ToCol] = piece;
-        boardState[move.FromRow][move.FromCol] = ' ';
+    //     boardState[move.ToRow][move.ToCol] = piece;
+    //     boardState[move.FromRow][move.FromCol] = ' ';
 
-        console.log('Board after:', JSON.stringify(boardState));
-    }
+    //     console.log('Board after:', JSON.stringify(boardState));
+    // }
 
     function boardToFen() {
         let fen = '';
@@ -265,13 +259,24 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Initializing game...');
         const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
         boardState = fenToBoard(startFen);
+
+        // Sync the worker state
+        if (window.chessWorker) {
+            window.chessWorker.postMessage({ type: "INIT_BOARD", payload: { fen: startFen } });
+        }
+
         fromSquare = null;
         isAwaitingAi = false;
+        isGameOver = false;
         statusElement.textContent = 'White to move';
         updateUi();
-        console.log('Game initialized');
     }
 
+    // Wait for worker to be ready before starting game first time
+    window.onChessWorkerReady = () => {
+        initGame();
+    };
+
     restartButton.addEventListener('click', initGame);
-    initGame();
+    // Don't call initGame() directly here anymore, wasm-init.js will call window.onChessWorkerReady
 });

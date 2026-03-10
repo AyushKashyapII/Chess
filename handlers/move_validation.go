@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fmt"
+	//"fmt"
 	"sort"
 )
 
@@ -239,10 +239,10 @@ func IsValidMove(board [8][8]rune, piece rune, fromRow, fromCol, toRow, toCol in
 func handlePawnPromotion(toRow int, promotionPiece rune, isWhite bool) bool {
 	if (isWhite && toRow == 0) || (!isWhite && toRow == 7) {
 		if promotionPiece == 'Q' || promotionPiece == 'R' || promotionPiece == 'B' || promotionPiece == 'N' || promotionPiece == 'q' || promotionPiece == 'r' || promotionPiece == 'b' || promotionPiece == 'n' {
-			fmt.Println("Pawn promotion")
+			//fmt.Println("Pawn promotion")
 			return true
 		}
-		fmt.Println("Invalid or missing promotion piece.")
+		//fmt.Println("Invalid or missing promotion piece.")
 		return false
 	}
 	return true
@@ -458,19 +458,19 @@ func FindBestMove(board [8][8]rune, isWhiteTurn bool) Move {
 	var depth = 3
 	var alpha = -10000
 	var beta = 10000
-	fmt.Println("hit 1 ")
+	//fmt.Println("hit 1 ")
 
 	allMoves := GenereateAllMoves(board, isWhiteTurn)
 	if len(allMoves) == 0 {
-		fmt.Println("U have lost MINIMAX")
+		//fmt.Println("U have lost MINIMAX")
 	}
-	fmt.Println("all moves gen :")
+	//fmt.Println("all moves gen :")
 
 	initial_hash := GetZobristValue(board)
 	index := initial_hash & (ttSize - 1)
 	entry := &transpositionTable[index]
 	if entry.HashKey == initial_hash && entry.Depth >= 3 {
-		fmt.Println("hash found in the databse using it ")
+		//fmt.Println("hash found in the databse using it ")
 		return transpositionTable[index].BestMove
 	}
 	//if initial_hash exists and also tht depth >=3 then retrurn
