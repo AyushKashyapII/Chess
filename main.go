@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
+	//"os"
 	"strings"
-	"syscall/js"
+	//"syscall/js"
 )
 
 type MoveRequest struct {
@@ -34,35 +34,14 @@ type ValidateResponse struct {
 }
 
 func main() {
-	fmt.Println("CHESS ENGINE!!!")
+	fmt.Println("CHESS ENGINE WASM INITIALIZED")
 	handlers.InitZobrist()
-	fmt.Println("Will now implement WASM!!!")
-	c:=make(chan struct{},0)
-	js.Global().Set("createMove",js.FuncOf(func(this js.Value,args []js.Value) interface{}{
-		move:=Move{
-			FromRow:args[0].Int(),
-			FromCol:args[1].Int(),
-			ToRow:args[2].Int(),
-			ToCol:args[3].Int(),
-		}
-		jsonData,_:=json.Marshal(move)
-		js.Global().Get("handleMove").Invoke(string(jsonData))
 
-		return string(jsonData)
-	}))
-	// http.HandleFunc("/get_move", handleGetMove)
-	// http.HandleFunc("/validate_move", validate_move)
-	// http.Handle("/", http.FileServer(http.Dir("./frontend")))
-
-	// port := os.Getenv("PORT")
-	// if port == "" {
-	// 	port = "8080"
-	// }
-
-	// fmt.Printf("Starting the chess engine at port %s\n", port)
-	// if err := http.ListenAndServe(":"+port, nil); err != nil {
-	// 	log.Fatal(err)
-	// }
+	// Keep the Go program running
+	c := make(chan struct{}, 0)
+	
+	// TODO: Register JS functions here
+	// js.Global().Set("findBestMove", js.FuncOf(func(this js.Value, args []js.Value) interface{} { ... }))
 
 	<-c
 }
