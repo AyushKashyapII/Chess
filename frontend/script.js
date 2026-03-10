@@ -3,24 +3,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusElement = document.getElementById('status');
     const restartButton = document.getElementById('restart-button');
     const pieceImageFiles = {
-        'P': 'pieces/whitePawn.svg', 'N': 'pieces/whiteKnight.svg', 
-        'B': 'pieces/whiteBishop.svg', 'R': 'pieces/whiteRook.svg', 
+        'P': 'pieces/whitePawn.svg', 'N': 'pieces/whiteKnight.svg',
+        'B': 'pieces/whiteBishop.svg', 'R': 'pieces/whiteRook.svg',
         'Q': 'pieces/whiteQueen.svg', 'K': 'pieces/whiteKing.svg',
-        'p': 'pieces/blackPawn.svg', 'n': 'pieces/blackKnight.svg', 
-        'b': 'pieces/blackBishop.svg', 'r': 'pieces/blackRook.svg', 
+        'p': 'pieces/blackPawn.svg', 'n': 'pieces/blackKnight.svg',
+        'b': 'pieces/blackBishop.svg', 'r': 'pieces/blackRook.svg',
         'q': 'pieces/blackQueen.svg', 'k': 'pieces/blackKing.svg'
     };
 
     let boardState = [];
     let fromSquare = null;
     let isAwaitingAi = false;
-    let isGameOver=false;
-    let blackKingCheck=false;
-    let whiteKingCheck=false;
+    let isGameOver = false;
+    let blackKingCheck = false;
+    let whiteKingCheck = false;
 
     function handleSquareClick(row, col) {
         console.log('Clicked:', row, col);
-        
+
         if (isAwaitingAi) {
             console.log('Waiting for AI, click ignored');
             return;
@@ -68,25 +68,21 @@ document.addEventListener('DOMContentLoaded', () => {
     async function validateMove(move) {
         const fenBefore = boardToFen();
         console.log('FEN before move:', fenBefore);
-        
-        try {
-            const response = await fetch('/validate_move', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fen: fenBefore, move: move })
-            });
 
-            if (!response.ok) {
-                throw new Error(`Server Error: ${response.status}`);
+        try {
+            if (typeof validate_move_wasm !== 'function') {
+                throw new Error("WASM function 'validate_move_wasm' not found. Is it initialized?");
             }
 
-            const result = await response.json();
-            console.log('Validation result:', result);
+            const resultJson = validate_move_wasm(fenBefore, move.FromRow, move.FromCol, move.ToRow, move.ToCol);
+            const result = JSON.parse(resultJson);
+
+            console.log('Validation result (WASM):', result);
 
             if (result.valid) {
                 console.log('Move is valid! Executing...');
                 if (result.newFen) {
-                    console.log('Using server FEN:', result.newFen);
+                    console.log('Using WASM FEN:', result.newFen);
                     boardState = fenToBoard(result.newFen);
                 } else {
                     makeMove(move);
@@ -95,20 +91,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('FEN after move:', fenAfter);
                 fromSquare = null;
                 updateUi();
-                setTimeout(() => {
-                    console.log('Requesting AI move...');
-                    getAiMove();
-                }, 300);
+                getAiMove();
+
+                isAwaitingAi = false;
             } else {
                 console.log('Move is invalid!');
                 statusElement.textContent = 'Invalid Move! Try again.';
                 isAwaitingAi = false;
                 updateUi();
             }
-            
+
         } catch (error) {
-            console.error('Error validating move:', error);
-            statusElement.textContent = 'Error validating move: ' + error.message;
+            console.error('Error during WASM validation:', error);
+            statusElement.textContent = 'Error: ' + error.message;
             isAwaitingAi = false;
             fromSquare = null;
             updateUi();
@@ -118,26 +113,23 @@ document.addEventListener('DOMContentLoaded', () => {
     async function getAiMove() {
         const fen = boardToFen();
         console.log('Requesting AI move for FEN:', fen);
-        
-        try {
-            const response = await fetch('/get_move', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fen: fen })
-            });
 
-            if (!response.ok) {
-                throw new Error(`Server Error: ${response.statusText}`);
+        try {
+            if (typeof get_ai_move_wasm !== 'function') {
+                throw new Error("WASM function 'get_ai_move_wasm' not found. Is it initialized?");
             }
 
-            const aiMove = await response.json();
+            const resultJson = get_ai_move_wasm(fen);
+            const aiMove = JSON.parse(resultJson);
+
+            //const aiMove = await response.json();
             console.log('AI move received:', aiMove);
-            
+
             if (aiMove && aiMove.valid) {
-                if(!aiMove.gamestatus){
+                if (!aiMove.gamestatus) {
                     console.log("Game is over user has no more moves left!!!")
-                    statusElement.textContent="Game Over!!!You Lost"
-                }else if (aiMove.newFen) {
+                    statusElement.textContent = "Game Over!!!You Lost"
+                } else if (aiMove.newFen) {
                     console.log('Using AI FEN:', aiMove.newFen);
                     boardState = fenToBoard(aiMove.newFen);
                     const fenAfter = boardToFen();
@@ -145,12 +137,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     console.log('No newFen in AI response, game over?');
                     statusElement.textContent = 'Game Over!!You Won';
-                    isGameOver=true
+                    isGameOver = true
                 }
             } else {
                 console.log('No AI move - game over?');
                 statusElement.textContent = 'Game Over!';
-                isGameOver=true
+                isGameOver = true
                 //return
             }
 
@@ -168,11 +160,11 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBoard();
         updateStatus();
     }
-    
+
     function renderBoard() {
         console.log('Rendering board...');
         boardElement.innerHTML = '';
-        
+
         for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
                 const square = document.createElement('div');
@@ -192,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     pieceElement.alt = pieceChar;
                     square.appendChild(pieceElement);
                 }
-                
+
                 square.addEventListener('click', () => handleSquareClick(r, c));
                 boardElement.appendChild(square);
             }
@@ -201,9 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateStatus() {
-        if(isGameOver){
-            statusElement.textContent="Game Over!!!"
-        }else if (isAwaitingAi) {
+        if (isGameOver) {
+            statusElement.textContent = "Game Over!!!"
+        } else if (isAwaitingAi) {
             statusElement.textContent = 'Black is thinking...';
         } else {
             statusElement.textContent = 'White to move';
@@ -213,13 +205,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function makeMove(move) {
         console.log('makeMove called with:', move);
         console.log('Board before:', JSON.stringify(boardState));
-        
+
         const piece = boardState[move.FromRow][move.FromCol];
         console.log('Moving piece:', piece, 'from', move.FromRow, move.FromCol, 'to', move.ToRow, move.ToCol);
-        
+
         boardState[move.ToRow][move.ToCol] = piece;
         boardState[move.FromRow][move.FromCol] = ' ';
-        
+
         console.log('Board after:', JSON.stringify(boardState));
     }
 
@@ -253,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const board = Array(8).fill(null).map(() => Array(8).fill(' '));
         const [position] = fen.split(' ');
         const rows = position.split('/');
-        
+
         for (let r = 0; r < 8; r++) {
             let c = 0;
             for (const char of rows[r]) {
@@ -265,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-        
+
         return board;
     }
 
@@ -279,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUi();
         console.log('Game initialized');
     }
-    
+
     restartButton.addEventListener('click', initGame);
     initGame();
 });

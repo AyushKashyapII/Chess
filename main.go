@@ -4,11 +4,11 @@ import (
 	"chess-engine/handlers"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
+	//"log"
+	//"net/http"
 	//"os"
 	"strings"
-	//"syscall/js"
+	"syscall/js"
 )
 
 type MoveRequest struct {
@@ -23,7 +23,7 @@ type Move struct {
 }
 
 type ValidateRequest struct {
-	Fen  string `json:"fen"`
+	//Fen  string `json:"fen"`
 	Move Move   `json:"move"`
 }
 
@@ -37,24 +37,20 @@ func main() {
 	fmt.Println("CHESS ENGINE WASM INITIALIZED")
 	handlers.InitZobrist()
 
+	// Register JS functions
+	js.Global().Set("validate_move_wasm", js.FuncOf(validate_move_wasm))
+	js.Global().Set("get_ai_move_wasm", js.FuncOf(get_ai_move_wasm))
+
 	// Keep the Go program running
 	c := make(chan struct{}, 0)
-	
-	// TODO: Register JS functions here
-	// js.Global().Set("findBestMove", js.FuncOf(func(this js.Value, args []js.Value) interface{} { ... }))
-
 	<-c
 }
 
-func handleGetMove(w http.ResponseWriter, r *http.Request) {
-	var request MoveRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Error: Invalid request format", http.StatusBadRequest)
-		return
-	}
+func get_ai_move_wasm(this js.Value, args []js.Value) any {
+	fen:=args[0].String()
 
-	fmt.Println("Received FEN from client:", request.Fen)
-	board := parseFEN(request.Fen)
+	fmt.Println("Received FEN from client:", fen)
+	board := parseFEN(fen)
 	for i := 0; i < 8; i++ {
 		for j := 0; j < 8; j++ {
 			if board[i][j] == 0 || board[i][j] == ' ' {
@@ -74,11 +70,10 @@ func handleGetMove(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("WARNING: AI returned no move (all zeros)")
 		response := ValidateResponse{
 			Valid:  false,
-			NewFen: request.Fen,
+			NewFen: fen,
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-		return
+		jsonBytes, _ := json.Marshal(response)
+		return string(jsonBytes)
 	}
 	aiMove := Move{
 		FromRow: bestMove.FromRow,
@@ -104,62 +99,48 @@ func handleGetMove(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("AI move new FEN:", response.NewFen)
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding response: %v", err)
-	}
+	jsonBytes, _ := json.Marshal(response)
+	return string(jsonBytes)
 }
 
-func validate_move(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	var data ValidateRequest
-	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
+func validate_move_wasm(this js.Value, args []js.Value) interface{} {
+	if len(args) < 5 {
+		return "error: missing arguments (fen, fromRow, fromCol, toRow, toCol)"
 	}
 
-	fmt.Println("request validate move:", data.Move)
-	fmt.Println("request fen:", data.Fen)
+	fen := args[0].String()
+	fromRow := args[1].Int()
+	fromCol := args[2].Int()
+	toRow := args[3].Int()
+	toCol := args[4].Int()
 
-	parsedBoard := parseFEN(data.Fen)
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 8; j++ {
-			fmt.Print(string(parsedBoard[i][j]))
-		}
-		fmt.Println()
-	}
+	fmt.Printf("Validating move from (%d,%d) to (%d,%d) for FEN: %s\n", fromRow, fromCol, toRow, toCol, fen)
+
+	parsedBoard := parseFEN(fen)
 	valid := handlers.IsValidMove(
 		parsedBoard,
-		parsedBoard[data.Move.FromRow][data.Move.FromCol],
-		data.Move.FromRow,
-		data.Move.FromCol,
-		data.Move.ToRow,
-		data.Move.ToCol,
+		parsedBoard[fromRow][fromCol],
+		fromRow,
+		fromCol,
+		toRow,
+		toCol,
 		nil,
 	)
 
-	fmt.Println("valid ", valid)
-	isPossible:=true
-	//fmt.Println("fen rece",data.Fen)
-
 	response := ValidateResponse{
-		GameStatus: isPossible,
-		Valid:  valid,
-		NewFen: data.Fen,
+		GameStatus: true,
+		Valid:      valid,
+		NewFen:     fen,
 	}
 
 	if valid {
-		newBoard := applyMove(parsedBoard, data.Move)
+		move := Move{FromRow: fromRow, FromCol: fromCol, ToRow: toRow, ToCol: toCol}
+		newBoard := applyMove(parsedBoard, move)
 		response.NewFen = boardToFEN(newBoard)
-		fmt.Println("Move is valid!")
-		fmt.Println("new FEN:", response.NewFen)
-	} else {
-		fmt.Println("Move is INVALID")
 	}
 
-	fmt.Println("Sending response:", response)
-	json.NewEncoder(w).Encode(response)
+	jsonBytes, _ := json.Marshal(response)
+	return string(jsonBytes)
 }
 
 func parseFEN(fen string) [8][8]rune {
