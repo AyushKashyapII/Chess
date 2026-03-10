@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"syscall/js"
 )
 
 type MoveRequest struct {
@@ -35,19 +36,35 @@ type ValidateResponse struct {
 func main() {
 	fmt.Println("CHESS ENGINE!!!")
 	handlers.InitZobrist()
-	http.HandleFunc("/get_move", handleGetMove)
-	http.HandleFunc("/validate_move", validate_move)
-	http.Handle("/", http.FileServer(http.Dir("./frontend")))
+	fmt.Println("Will now implement WASM!!!")
+	c:=make(chan struct{},0)
+	js.Global().Set("createMove",js.FuncOf(func(this js.Value,args []js.Value) interface{}{
+		move:=Move{
+			FromRow:args[0].Int(),
+			FromCol:args[1].Int(),
+			ToRow:args[2].Int(),
+			ToCol:args[3].Int(),
+		}
+		jsonData,_:=json.Marshal(move)
+		js.Global().Get("handleMove").Invoke(string(jsonData))
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+		return string(jsonData)
+	}))
+	// http.HandleFunc("/get_move", handleGetMove)
+	// http.HandleFunc("/validate_move", validate_move)
+	// http.Handle("/", http.FileServer(http.Dir("./frontend")))
 
-	fmt.Printf("Starting the chess engine at port %s\n", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
-	}
+	// port := os.Getenv("PORT")
+	// if port == "" {
+	// 	port = "8080"
+	// }
+
+	// fmt.Printf("Starting the chess engine at port %s\n", port)
+	// if err := http.ListenAndServe(":"+port, nil); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	<-c
 }
 
 func handleGetMove(w http.ResponseWriter, r *http.Request) {
