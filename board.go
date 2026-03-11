@@ -1,3 +1,5 @@
+//go:build gui && !js
+
 package main
 
 import (
