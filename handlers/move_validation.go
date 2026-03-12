@@ -422,7 +422,6 @@ func GenereateAllMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 				if pos[0] < 0 || pos[0] >= 8 || pos[1] < 0 || pos[1] >= 8 {
 					continue
 				}
-				kingRow,kingCol:=findKing(board,isWhiteTurn)
 				var tempBoard [8][8]rune
 				for i:=0;i<8;i++{
 					for j:=0;j<8;j++{
@@ -430,8 +429,17 @@ func GenereateAllMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 					}
 				}
 				tempBoard[pos[0]][pos[1]]=piece
-				tempBoard[fromRow][fromCol]=0
-				if !IsInCheck(tempBoard,isWhiteTurn,kingRow,kingCol){
+				tempBoard[fromRow][fromCol]=0				
+	
+				var kingRow, kingCol int
+				if piece == 'K' || piece == 'k' {
+					kingRow = pos[0]
+					kingCol = pos[1]
+				} else {
+					kingRow, kingCol = findKing(board, isWhiteTurn)
+				}
+				
+				if !IsInCheck(tempBoard, isWhiteTurn, kingRow, kingCol){
 					legalMoves = append(legalMoves, Move{FromRow: fromRow, FromCol: fromCol, ToRow: pos[0], ToCol: pos[1]})
 				}
 			}
@@ -619,43 +627,35 @@ func FindBestMove(board [8][8]rune, isWhiteTurn bool) Move {
 	}
 
 	// Aspiration Search with Iterative Deepening
-	const targetDepth = 3 // Same as original
-	const aspirationWindow = 25 // centipawns
+	const targetDepth = 3 
+	const aspirationWindow = 25 
 	const infinity = 100000
 	const negInfinity = -100000
 
-	var bestMove Move = allMoves[0] // Initialize to first move
+	var bestMove Move = allMoves[0]
 	var bestScore int
-	var previousScore int = 0 // Start with 0 (equal position)
+	var previousScore int = 0 
 	
-	// Iterative Deepening: search from depth 1 to targetDepth
 	for depth := 1; depth <= targetDepth; depth++ {
 		var alpha, beta int
 		var score int
 		
-		// Try aspiration window search (except for depth 1)
 		if depth > 1 {
-			// Set narrow window around previous score
 			alpha = previousScore - aspirationWindow
 			beta = previousScore + aspirationWindow
 			
-			// Search with aspiration window
 			score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, previousScore)
 			
-			// Check if we need to re-search due to window failure
 			if score <= alpha {
-				// Fail low: re-search with wider window (from -infinity)
 				alpha = negInfinity
 				beta = previousScore + aspirationWindow
 				score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, previousScore)
 			} else if score >= beta {
-				// Fail high: re-search with wider window (to +infinity)
 				alpha = previousScore - aspirationWindow
 				beta = infinity
 				score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, previousScore)
 			}
 		} else {
-			// First depth: use full window
 			alpha = negInfinity
 			beta = infinity
 			score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, 0)
@@ -664,7 +664,6 @@ func FindBestMove(board [8][8]rune, isWhiteTurn bool) Move {
 		bestScore = score
 		previousScore = score
 		
-		// Store result in transposition table
 		learnedInfo := HashMap{
 			HashKey:  initial_hash,
 			Score:    bestScore,
@@ -677,12 +676,10 @@ func FindBestMove(board [8][8]rune, isWhiteTurn bool) Move {
 	return bestMove
 }
 
-// Helper function to perform the actual search with given alpha-beta window
 func searchWithAspiration(board [8][8]rune, isWhiteTurn bool, depth int, alpha, beta int, initial_hash uint64, allMoves []Move, previousScore int) (int, Move) {
 	const infinity = 100000
 	const negInfinity = -100000
 	
-	// Initialize bestMove to first move to ensure we always return something valid
 	var bestMove Move = allMoves[0]
 	var bestScore int
 	

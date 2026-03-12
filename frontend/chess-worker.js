@@ -20,15 +20,15 @@ onmessage = function (e) {
             self.init_board_wasm(payload.fen);
             break;
         case "VALIDATE_MOVE":
-            console.log("Worker: Validating move", payload);
-            const valResult = self.validate_move_wasm(
-                payload.fromR, payload.fromC, payload.toR, payload.toC
-            );
+            console.log("Worker: Validating move string", payload);
+            // Use string format like "e2e4"
+            const valResult = self.validate_move_string_wasm(payload.moveString);
             postMessage({ type: "VALIDATE_MOVE_RESULT", payload: valResult });
             break;
         case "GET_AI_MOVE":
             console.log("Worker: Getting AI move");
-            const aiResult = self.get_ai_move_wasm();
+            // Use string format function
+            const aiResult = self.get_ai_move_string_wasm();
             postMessage({ type: "GET_AI_MOVE_RESULT", payload: aiResult });
             break;
     }

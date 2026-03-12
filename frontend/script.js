@@ -78,13 +78,24 @@ document.addEventListener('DOMContentLoaded', () => {
         validateMove(move);
     }
 
+    // Helper function to convert row/col to algebraic notation (like engine_cli.go)
+    function coordsToSquare(row, col) {
+        const file = String.fromCharCode('a'.charCodeAt(0) + col);
+        const rank = 8 - row;
+        return file + rank;
+    }
+
     async function validateMove(move) {
         try {
+            // Convert coordinates to string format like "e2e4" (same as engine_cli.go)
+            const fromSquareStr = coordsToSquare(move.FromRow, move.FromCol);
+            const toSquareStr = coordsToSquare(move.ToRow, move.ToCol);
+            const moveString = fromSquareStr + toSquareStr;
+            
+            console.log('Sending move string:', moveString);
+            
             const result = await callWorker("VALIDATE_MOVE", {
-                fromR: move.FromRow,
-                fromC: move.FromCol,
-                toR: move.ToRow,
-                toC: move.ToCol
+                moveString: moveString
             });
 
             console.log('Validation result (Worker):', result);
@@ -92,10 +103,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result && result.valid) {
                 if (result.newFen) {
                     boardState = fenToBoard(result.newFen);
-                } else {
-                    // This branch should ideally not be hit if worker always returns newFen
-                    // but kept for robustness if worker logic changes.
-                    // makeMove(move); // Removed as worker handles board state
                 }
                 fromSquare = null;
                 updateUi();
@@ -104,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     getAiMove();
                 }, 100);
             } else {
-                statusElement.textContent = 'Invalid Move! Try again.';
+                statusElement.textContent = result.error || 'Invalid Move! Try again.';
                 isAwaitingAi = false;
                 updateUi();
             }
@@ -133,6 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 if (aiMove.newFen) {
                     boardState = fenToBoard(aiMove.newFen);
+                }
+                // Log the move in string format (like engine_cli.go)
+                if (aiMove.move) {
+                    console.log('Engine plays:', aiMove.move);
                 }
             } else {
                 statusElement.textContent = 'Game Over! You Won';
