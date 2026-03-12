@@ -118,11 +118,11 @@ This will:
 From the `Chess/frontend` directory, run any static server. For example, with Python:
 ```bash
 cd frontend
-python -m http.server 8000
+npx serve .
 ```
 Then open:
 ```text
-http://localhost:8000/index.html
+http://localhost:3000
 ```
 
 #### How the Browser Game Works
