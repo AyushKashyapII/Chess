@@ -477,8 +477,10 @@ func getPossibleMoves(piece rune, fromRow, fromCol int, board [8][8]rune) [][2]i
 		deltas := [][2]int{{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {2, -1}, {2, 1}}
 		for _, d := range deltas {
 			r, c := fromRow+d[0], fromCol+d[1]
-			if r >= 0 && r < 8 && c >= 0 && c < 8 && isWhite(piece) != isWhite(board[r][c]) {
-				moves = append(moves, [2]int{r, c})
+			if r >= 0 && r < 8 && c >= 0 && c < 8 {
+				if board[r][c] == 0 || isWhite(piece) != isWhite(board[r][c]) {
+					moves = append(moves, [2]int{r, c})
+				}
 			}
 		}
 
@@ -491,8 +493,10 @@ func getPossibleMoves(piece rune, fromRow, fromCol int, board [8][8]rune) [][2]i
 				}
 
 				r, c := fromRow+dr, fromCol+dc
-				if r >= 0 && r < 8 && c >= 0 && c < 8 && isWhite(piece) != isWhite(board[r][c]) {
-					moves = append(moves, [2]int{r, c})
+				if r >= 0 && r < 8 && c >= 0 && c < 8 {
+					if board[r][c] == 0 || isWhite(piece) != isWhite(board[r][c]) {
+						moves = append(moves, [2]int{r, c})
+					}
 				}
 			}
 		}
