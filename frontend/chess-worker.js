@@ -3,13 +3,32 @@ importScripts("wasm_exec.js");
 const go = new Go();
 let wasmInstance;
 
-WebAssembly.instantiateStreaming(fetch("chess.wasm"), go.importObject).then((result) => {
-    wasmInstance = result.instance;
-    go.run(wasmInstance);
-    postMessage({ type: "READY" });
-}).catch((err) => {
-    console.error("Worker WASM load failed:", err);
-});
+// Some static hosts don’t serve chess.wasm with the correct MIME type,
+// which breaks instantiateStreaming. Fall back to fetch+instantiate.
+(async () => {
+    try {
+        const result = await WebAssembly.instantiateStreaming(
+            fetch("chess.wasm"),
+            go.importObject
+        );
+        wasmInstance = result.instance;
+        go.run(wasmInstance);
+        postMessage({ type: "READY" });
+    } catch (err) {
+        console.warn("instantiateStreaming failed, falling back to arrayBuffer:", err);
+        try {
+            const resp = await fetch("chess.wasm");
+            const bytes = await resp.arrayBuffer();
+            const result = await WebAssembly.instantiate(bytes, go.importObject);
+            wasmInstance = result.instance;
+            go.run(wasmInstance);
+            postMessage({ type: "READY" });
+        } catch (err2) {
+            console.error("Worker WASM load failed:", err2);
+            postMessage({ type: "ERROR", error: String(err2) });
+        }
+    }
+})();
 
 onmessage = function (e) {
     const { type, payload, fen, movesToSearch } = e.data;
