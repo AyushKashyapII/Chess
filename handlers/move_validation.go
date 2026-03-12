@@ -1,8 +1,9 @@
 package handlers
 
 import (
-	//"fmt"
+	"fmt"
 	"sort"
+	"time"
 )
 
 type CastlingRights struct {
@@ -22,6 +23,38 @@ type CastlingRights struct {
 type Move struct {
 	FromRow, FromCol int
 	ToRow, ToCol     int
+}
+
+// Simple in-engine profiling counters (aggregated across calls).
+var (
+	IsValidMoveTime         time.Duration
+	IsValidMoveCount        int64
+	GenerateAllMovesTime    time.Duration
+	GenerateAllMovesCount   int64
+	GenerateCaptureMovesTime time.Duration
+	GenerateCaptureMovesCount int64
+	FindBestMoveTime        time.Duration
+	FindBestMoveCount       int64
+	MinimaxTime             time.Duration
+	MinimaxCount            int64
+	QuiescenceTime          time.Duration
+	QuiescenceCount         int64
+)
+
+// ResetProfiling clears all profiling counters; useful between moves.
+func ResetProfiling() {
+	IsValidMoveTime = 0
+	IsValidMoveCount = 0
+	GenerateAllMovesTime = 0
+	GenerateAllMovesCount = 0
+	GenerateCaptureMovesTime = 0
+	GenerateCaptureMovesCount = 0
+	FindBestMoveTime = 0
+	FindBestMoveCount = 0
+	MinimaxTime = 0
+	MinimaxCount = 0
+	QuiescenceTime = 0
+	QuiescenceCount = 0
 }
 
 // var initialPositions = map[string]bool{
@@ -74,6 +107,13 @@ func IsSquareUnderAttack(board [8][8]rune, row, col int, attackerIsWhite bool) b
 }
 
 func canAttackSquare(board [8][8]rune, piece rune, fromRow, fromCol, toRow, toCol int) bool {
+	// Bounds check to prevent index out of range errors
+	if toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8 {
+		return false
+	}
+	if fromRow < 0 || fromRow >= 8 || fromCol < 0 || fromCol >= 8 {
+		return false
+	}
 	if board[toRow][toCol] != 0 && isWhite(piece) == isWhite(board[toRow][toCol]) {
 		return false
 	}
@@ -100,6 +140,10 @@ func canAttackSquare(board [8][8]rune, piece rune, fromRow, fromCol, toRow, toCo
 }
 
 func IsInCheck(board [8][8]rune, isWhiteKing bool, kingRow, kingCol int) bool {
+	// If king is not found, return false (shouldn't happen in valid game states)
+	if kingRow < 0 || kingRow >= 8 || kingCol < 0 || kingCol >= 8 {
+		return false
+	}
 	return IsSquareUnderAttack(board, kingRow, kingCol, !isWhiteKing)
 }
 
@@ -145,6 +189,12 @@ func IsCastleable(board [8][8]rune, fromRow, fromCol, toRow, toCol int) bool {
 }
 
 func IsValidMove(board [8][8]rune, piece rune, fromRow, fromCol, toRow, toCol int, promotionPiece *rune) bool {
+	start := time.Now()
+	defer func() {
+		IsValidMoveTime += time.Since(start)
+		IsValidMoveCount++
+	}()
+
 	if toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8 {
 		return false
 	}
@@ -294,8 +344,8 @@ func score_move(move Move, board [8][8]rune) int {
 	score := 0
 
 	if next_piece != 0 {
-		score = abs(GetValue(next_piece)) - abs(GetValue(current_piece))
-		score = score * 100
+		score = abs(GetValue(next_piece)) - abs(GetValue(current_piece)/10)
+		score = score + 10000
 	}
 	var tempBoard [8][8]rune
 	for i := 0; i < 8; i++ {
@@ -329,7 +379,28 @@ func score_move(move Move, board [8][8]rune) int {
 
 }
 
+func findKing(board [8][8]rune, isWhite bool) (int, int) {
+	kingToFind:='K'
+	if !isWhite {
+		kingToFind='k'
+	}
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			if board[i][j] == kingToFind {
+				return i, j
+			}
+		}
+	}	
+	return -1, -1
+}
+
 func GenereateAllMoves(board [8][8]rune, isWhiteTurn bool) []Move {
+	start := time.Now()
+	defer func() {
+		GenerateAllMovesTime += time.Since(start)
+		GenerateAllMovesCount++
+	}()
+
 	var legalMoves []Move
 	for fromRow := 0; fromRow < 8; fromRow++ {
 		for fromCol := 0; fromCol < 8; fromCol++ {
@@ -345,13 +416,31 @@ func GenereateAllMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 				continue
 			}
 
-			possibleMoves := getPossibleMoves(piece, fromRow, fromCol)
-			for _, pos := range possibleMoves {
-				toRow, toCol := pos[0], pos[1]
-				if IsValidMove(board, piece, fromRow, fromCol, toRow, toCol, nil) {
-					legalMoves = append(legalMoves, Move{FromRow: fromRow, FromCol: fromCol, ToRow: toRow, ToCol: toCol})
+			possibleMoves := getPossibleMoves(piece, fromRow, fromCol,board)
+			for _,pos:=range possibleMoves{
+				// Bounds check to prevent index out of range errors
+				if pos[0] < 0 || pos[0] >= 8 || pos[1] < 0 || pos[1] >= 8 {
+					continue
+				}
+				kingRow,kingCol:=findKing(board,isWhiteTurn)
+				var tempBoard [8][8]rune
+				for i:=0;i<8;i++{
+					for j:=0;j<8;j++{
+						tempBoard[i][j]=board[i][j]
+					}
+				}
+				tempBoard[pos[0]][pos[1]]=piece
+				tempBoard[fromRow][fromCol]=0
+				if !IsInCheck(tempBoard,isWhiteTurn,kingRow,kingCol){
+					legalMoves = append(legalMoves, Move{FromRow: fromRow, FromCol: fromCol, ToRow: pos[0], ToCol: pos[1]})
 				}
 			}
+			// for _, pos := range possibleMoves {
+			// 	toRow, toCol := pos[0], pos[1]
+			// 	if IsValidMove(board, piece, fromRow, fromCol, toRow, toCol, nil) {
+			// 		legalMoves = append(legalMoves, Move{FromRow: fromRow, FromCol: fromCol, ToRow: toRow, ToCol: toCol})
+			// 	}
+			// }
 			// for toRow := 0; toRow < 8; toRow++ {
 			// 	for toCol := 0; toCol < 8; toCol++ {
 			// 		if IsValidMove(board, piece, fromRow, fromCol, toRow, toCol, nil) {
@@ -372,7 +461,7 @@ func GenereateAllMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 	return legalMoves
 }
 
-func getPossibleMoves(piece rune, fromRow, fromCol int) [][2]int {
+func getPossibleMoves(piece rune, fromRow, fromCol int, board [8][8]rune) [][2]int {
 	var moves [][2]int
 
 	switch piece {
@@ -380,7 +469,7 @@ func getPossibleMoves(piece rune, fromRow, fromCol int) [][2]int {
 		deltas := [][2]int{{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {2, -1}, {2, 1}}
 		for _, d := range deltas {
 			r, c := fromRow+d[0], fromCol+d[1]
-			if r >= 0 && r < 8 && c >= 0 && c < 8 {
+			if r >= 0 && r < 8 && c >= 0 && c < 8 && isWhite(piece) != isWhite(board[r][c]) {
 				moves = append(moves, [2]int{r, c})
 			}
 		}
@@ -393,51 +482,107 @@ func getPossibleMoves(piece rune, fromRow, fromCol int) [][2]int {
 				}
 
 				r, c := fromRow+dr, fromCol+dc
-				if r >= 0 && r < 8 && c >= 0 && c < 8 {
+				if r >= 0 && r < 8 && c >= 0 && c < 8 && isWhite(piece) != isWhite(board[r][c]) {
 					moves = append(moves, [2]int{r, c})
 				}
 			}
 		}
-		moves = append(moves, [2]int{fromRow, fromCol + 2}, [2]int{fromRow, fromCol - 2})
+		// Castling moves with bounds checking
+		if fromCol+2 < 8 {
+			moves = append(moves, [2]int{fromRow, fromCol + 2})
+		}
+		if fromCol-2 >= 0 {
+			moves = append(moves, [2]int{fromRow, fromCol - 2})
+		}
 
 	case 'P':
-		if fromRow > 0 {
+		if fromRow > 0 && board[fromRow - 1][fromCol] == 0 {
 			moves = append(moves, [2]int{fromRow - 1, fromCol})
 		}
-		if fromRow == 6 {
-			moves = append(moves, [2]int{4, fromCol}, [2]int{5, fromCol})
+		if fromRow == 6 && board[4][fromCol] == 0 && board[5][fromCol] == 0 {
+			moves = append(moves, [2]int{4, fromCol})
 		}
-		if fromRow > 0 && fromCol > 0 {
+		if fromRow > 0 && fromCol > 0 && isWhite(piece) != isWhite(board[fromRow - 1][fromCol - 1]) {
 			moves = append(moves, [2]int{fromRow - 1, fromCol - 1})
 		}
-		if fromRow > 0 && fromCol < 7 {
+		if fromRow > 0 && fromCol < 7 && isWhite(piece) != isWhite(board[fromRow - 1][fromCol + 1]) {
 			moves = append(moves, [2]int{fromRow - 1, fromCol + 1})
 		}
 	case 'p':
-		if fromRow < 7 {
+		if fromRow < 7 && board[fromRow + 1][fromCol] == 0 {
 			moves = append(moves, [2]int{fromRow + 1, fromCol})
 		}
-		if fromRow == 1 {
+		if fromRow == 1 && board[3][fromCol] == 0 && board[2][fromCol] == 0 {
 			moves = append(moves, [2]int{3, fromCol})
 		}
-		if fromRow < 7 && fromCol > 0 {
+		if fromRow < 7 && fromCol > 0 && isWhite(piece) != isWhite(board[fromRow + 1][fromCol - 1]) {
 			moves = append(moves, [2]int{fromRow + 1, fromCol - 1})
 		}
-		if fromRow < 7 && fromCol < 7 {
+		if fromRow < 7 && fromCol < 7 && isWhite(piece) != isWhite(board[fromRow + 1][fromCol + 1]) {
 			moves = append(moves, [2]int{fromRow + 1, fromCol + 1})
 		}
-	default:
-		for r := 0; r < 8; r++ {
-			for c := 0; c < 8; c++ {
-				moves = append(moves, [2]int{r, c})
+	case 'R', 'r':
+		directions:=[][2]int{{-1,0},{1,0},{0,-1},{0,1}}
+		for _,d := range directions {
+			for i:=1;i<8;i++{
+				toRow,toCol:=fromRow+d[0]*i,fromCol+d[1]*i
+				if toRow<0 || toRow>=8 || toCol<0 || toCol>=8 {
+					break
+				}
+				if board[toRow][toCol]!=0{
+					if isWhite(piece) != isWhite(board[toRow][toCol]) {
+						moves = append(moves, [2]int{toRow, toCol})
+					}
+					break
+				}
+				moves = append(moves, [2]int{toRow, toCol})
 			}
 		}
-
+	case 'B', 'b':
+		directions:=[][2]int{{-1,-1},{-1,1},{1,-1},{1,1}}
+		for _,d := range directions {
+			for i:=1;i<8;i++{
+				toRow,toCol:=fromRow+d[0]*i,fromCol+d[1]*i
+				if toRow<0 || toRow>=8 || toCol<0 || toCol>=8 {
+					break
+				}
+				if board[toRow][toCol]!=0{
+					if isWhite(piece) != isWhite(board[toRow][toCol]) {
+						moves = append(moves, [2]int{toRow, toCol})
+					}
+					break
+				}
+				moves = append(moves, [2]int{toRow, toCol})
+			}
+		}
+	case 'Q', 'q':
+		directions:=[][2]int{{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}}
+		for _,d := range directions {
+			for i:=1;i<8;i++{
+				toRow,toCol:=fromRow+d[0]*i,fromCol+d[1]*i
+				if toRow<0 || toRow>=8 || toCol<0 || toCol>=8 {
+					break
+				}
+				if board[toRow][toCol]!=0{
+					if isWhite(piece) != isWhite(board[toRow][toCol]) {
+						moves = append(moves, [2]int{toRow, toCol})
+					}
+					break
+				}
+				moves = append(moves, [2]int{toRow, toCol})
+			}
+		}
 	}
 	return moves
 }
 
 func GenerateCaptureMoves(board [8][8]rune, isWhiteTurn bool) []Move {
+	start := time.Now()
+	defer func() {
+		GenerateCaptureMovesTime += time.Since(start)
+		GenerateCaptureMovesCount++
+	}()
+
 	allMoves := GenereateAllMoves(board, isWhiteTurn)
 	var capturemoves []Move
 	for _, move := range allMoves {
@@ -453,28 +598,100 @@ func GenerateCaptureMoves(board [8][8]rune, isWhiteTurn bool) []Move {
 }
 
 func FindBestMove(board [8][8]rune, isWhiteTurn bool) Move {
-	var bestMove Move
-	var bestScore = 100000
-	var depth = 3
-	var alpha = -10000
-	var beta = 10000
-	//fmt.Println("hit 1 ")
+	start := time.Now()
+	defer func() {
+		FindBestMoveTime += time.Since(start)
+		FindBestMoveCount++
+	}()
 
 	allMoves := GenereateAllMoves(board, isWhiteTurn)
 	if len(allMoves) == 0 {
-		//fmt.Println("U have lost MINIMAX")
+		fmt.Println("U have lost MINIMAX")
+		return Move{}
 	}
-	//fmt.Println("all moves gen :")
 
 	initial_hash := GetZobristValue(board)
 	index := initial_hash & (ttSize - 1)
 	entry := &transpositionTable[index]
 	if entry.HashKey == initial_hash && entry.Depth >= 3 {
-		//fmt.Println("hash found in the databse using it ")
+		//fmt.Println("hash found in the database using it ")
 		return transpositionTable[index].BestMove
 	}
-	//if initial_hash exists and also tht depth >=3 then retrurn
-	//var max_hash uint64
+
+	// Aspiration Search with Iterative Deepening
+	const targetDepth = 3 // Same as original
+	const aspirationWindow = 25 // centipawns
+	const infinity = 100000
+	const negInfinity = -100000
+
+	var bestMove Move = allMoves[0] // Initialize to first move
+	var bestScore int
+	var previousScore int = 0 // Start with 0 (equal position)
+	
+	// Iterative Deepening: search from depth 1 to targetDepth
+	for depth := 1; depth <= targetDepth; depth++ {
+		var alpha, beta int
+		var score int
+		
+		// Try aspiration window search (except for depth 1)
+		if depth > 1 {
+			// Set narrow window around previous score
+			alpha = previousScore - aspirationWindow
+			beta = previousScore + aspirationWindow
+			
+			// Search with aspiration window
+			score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, previousScore)
+			
+			// Check if we need to re-search due to window failure
+			if score <= alpha {
+				// Fail low: re-search with wider window (from -infinity)
+				alpha = negInfinity
+				beta = previousScore + aspirationWindow
+				score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, previousScore)
+			} else if score >= beta {
+				// Fail high: re-search with wider window (to +infinity)
+				alpha = previousScore - aspirationWindow
+				beta = infinity
+				score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, previousScore)
+			}
+		} else {
+			// First depth: use full window
+			alpha = negInfinity
+			beta = infinity
+			score, bestMove = searchWithAspiration(board, isWhiteTurn, depth, alpha, beta, initial_hash, allMoves, 0)
+		}
+		
+		bestScore = score
+		previousScore = score
+		
+		// Store result in transposition table
+		learnedInfo := HashMap{
+			HashKey:  initial_hash,
+			Score:    bestScore,
+			Depth:    depth,
+			BestMove: bestMove,
+		}
+		transpositionTable[index] = learnedInfo
+	}
+
+	return bestMove
+}
+
+// Helper function to perform the actual search with given alpha-beta window
+func searchWithAspiration(board [8][8]rune, isWhiteTurn bool, depth int, alpha, beta int, initial_hash uint64, allMoves []Move, previousScore int) (int, Move) {
+	const infinity = 100000
+	const negInfinity = -100000
+	
+	// Initialize bestMove to first move to ensure we always return something valid
+	var bestMove Move = allMoves[0]
+	var bestScore int
+	
+	if isWhiteTurn {
+		bestScore = negInfinity
+	} else {
+		bestScore = infinity
+	}
+
 	for _, move := range allMoves {
 		var tempBoard [8][8]rune
 		for i := 0; i < 8; i++ {
@@ -486,28 +703,43 @@ func FindBestMove(board [8][8]rune, isWhiteTurn bool) Move {
 		tempBoard[move.ToRow][move.ToCol] = piece
 		tempBoard[move.FromRow][move.FromCol] = 0
 		new_hash := UpdateHashForMove(initial_hash, move, board)
-		//if new hash exist then starigh return score and contnue otherwise make minimax xall
+		
 		score := Minimax(tempBoard, depth, !isWhiteTurn, alpha, beta, new_hash)
 
-		if score < bestScore {
-			bestScore = score
-			bestMove = move
-			//max_hash=new_hash
+		if isWhiteTurn {
+			if score > bestScore {
+				bestScore = score
+				bestMove = move
+			}
+			if score > alpha {
+				alpha = score
+			}
+			if alpha >= beta {
+				break // Beta cutoff
+			}
+		} else {
+			if score < bestScore {
+				bestScore = score
+				bestMove = move
+			}
+			if score < beta {
+				beta = score
+			}
+			if alpha >= beta {
+				break // Alpha cutoff
+			}
 		}
 	}
 
-	learnedInfo := HashMap{
-		HashKey:  initial_hash,
-		Score:    bestScore,
-		Depth:    3,
-		BestMove: bestMove,
-	}
-
-	transpositionTable[index] = learnedInfo
-	return bestMove
+	return bestScore, bestMove
 }
 
 func QuiescenceSearch(board [8][8]rune, isWhiteTurn bool, alpha, beta int) int {
+	start := time.Now()
+	defer func() {
+		QuiescenceTime += time.Since(start)
+		QuiescenceCount++
+	}()
 	base_score := Evaluate_board(board)
 	if isWhiteTurn {
 		if base_score >= beta {
@@ -525,6 +757,11 @@ func QuiescenceSearch(board [8][8]rune, isWhiteTurn bool, alpha, beta int) int {
 		}
 	}
 	capture_move := GenerateCaptureMoves(board, isWhiteTurn)
+	sort.Slice(capture_move, func(i,j int) bool {
+		score_i:=score_move(capture_move[i],board)
+		score_j:=score_move(capture_move[j],board)
+		return score_i>score_j
+	})
 
 	for _, move := range capture_move {
 		var tempBoard [8][8]rune
@@ -560,6 +797,11 @@ func QuiescenceSearch(board [8][8]rune, isWhiteTurn bool, alpha, beta int) int {
 }
 
 func Minimax(board [8][8]rune, depth int, isWhiteTurn bool, alpha int, beta int, current_hash uint64) int {
+	start := time.Now()
+	defer func() {
+		MinimaxTime += time.Since(start)
+		MinimaxCount++
+	}()
 
 	index := current_hash & (ttSize - 1)
 	entry := &transpositionTable[index]

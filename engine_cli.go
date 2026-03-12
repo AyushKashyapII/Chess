@@ -227,6 +227,9 @@ func main() {
 			whiteToMove = false
 
 		} else {
+			// reset profiling before engine move
+			handlers.ResetProfiling()
+
 			fmt.Println("Engine thinking...")
 			start := time.Now()
 			bestMove := handlers.FindBestMove(board, whiteToMove)
@@ -243,6 +246,15 @@ func main() {
 				coordsToSquare(bestMove.FromRow, bestMove.FromCol),
 				coordsToSquare(bestMove.ToRow, bestMove.ToCol),
 				elapsed)
+
+			// Print aggregated profiling info for this engine move
+			fmt.Println("Profiling (this engine move):")
+			fmt.Printf("  FindBestMove:      %v over %d calls\n", handlers.FindBestMoveTime, handlers.FindBestMoveCount)
+			fmt.Printf("  Minimax:           %v over %d calls\n", handlers.MinimaxTime, handlers.MinimaxCount)
+			fmt.Printf("  QuiescenceSearch:  %v over %d calls\n", handlers.QuiescenceTime, handlers.QuiescenceCount)
+			fmt.Printf("  GenAllMoves:       %v over %d calls\n", handlers.GenerateAllMovesTime, handlers.GenerateAllMovesCount)
+			fmt.Printf("  GenCaptureMoves:   %v over %d calls\n", handlers.GenerateCaptureMovesTime, handlers.GenerateCaptureMovesCount)
+			fmt.Printf("  IsValidMove:       %v over %d calls\n", handlers.IsValidMoveTime, handlers.IsValidMoveCount)
 
 			fmt.Println("New FEN (piece placement):", boardToFEN(board))
 			whiteToMove = true
