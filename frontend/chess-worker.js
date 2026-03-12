@@ -22,19 +22,16 @@ onmessage = function (e) {
             break;
         case "VALIDATE_MOVE":
             console.log("Worker: Validating move string", payload);
-            // Use string format like "e2e4"
             const valResult = self.validate_move_string_wasm(payload.moveString);
             postMessage({ type: "VALIDATE_MOVE_RESULT", payload: valResult });
             break;
         case "GET_AI_MOVE":
             console.log("Worker: Getting AI move");
-            // Use string format function
             const aiResult = self.get_ai_move_string_wasm();
             postMessage({ type: "GET_AI_MOVE_RESULT", payload: aiResult });
             break;
         case "GET_ALL_MOVES":
             console.log("Worker: Getting all legal moves for FEN:", fen);
-            // Get isWhiteTurn from payload, default to false (black's turn)
             const isWhiteTurn = e.data.isWhiteTurn !== undefined ? e.data.isWhiteTurn : false;
             const movesJson = self.get_all_legal_moves_wasm(fen, isWhiteTurn);
             postMessage({ type: "GET_MOVES_RESULT", data: movesJson });
