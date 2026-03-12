@@ -4,11 +4,8 @@ package main
 
 import (
 	"chess-engine/handlers"
-	//"encoding/json"
+	"encoding/json"
 	"fmt"
-	//"log"
-	//"net/http"
-	//"os"
 	"strings"
 	"syscall/js"
 )
@@ -43,6 +40,11 @@ func main() {
 	js.Global().Set("init_board_wasm", js.FuncOf(init_board_wasm))
 	js.Global().Set("validate_move_string_wasm", js.FuncOf(validate_move_string_wasm))
 	js.Global().Set("get_ai_move_string_wasm", js.FuncOf(get_ai_move_string_wasm))
+	
+	// Root splitting functions for parallel search
+	js.Global().Set("get_all_legal_moves_wasm", js.FuncOf(get_all_legal_moves_wasm))
+	js.Global().Set("search_subset_wasm", js.FuncOf(search_subset_wasm))
+	js.Global().Set("apply_move_wasm", js.FuncOf(apply_move_wasm))
 	
 	// Keep old functions for backward compatibility
 	js.Global().Set("validate_move_wasm", js.FuncOf(validate_move_wasm))
@@ -358,5 +360,138 @@ func get_ai_move_string_wasm(this js.Value, args []js.Value) interface{} {
 		"valid":      true,
 		"move":       moveString,
 		"newFen":     boardToFEN(currentBoard),
+	})
+}
+
+// get_all_legal_moves_wasm returns all legal moves as JSON string for the given FEN
+func get_all_legal_moves_wasm(this js.Value, args []js.Value) interface{} {
+	fen := "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+	if len(args) > 0 {
+		fen = args[0].String()
+	}
+	
+	board := parseFEN(fen)
+	isWhiteTurn := false // For AI move, it's black's turn
+	if len(args) > 1 {
+		isWhiteTurn = args[1].Bool()
+	}
+	
+	allMoves := handlers.GenereateAllMoves(board, isWhiteTurn)
+	
+	// Convert to JSON-serializable format
+	type MoveJSON struct {
+		FromRow int `json:"fromRow"`
+		FromCol int `json:"fromCol"`
+		ToRow   int `json:"toRow"`
+		ToCol   int `json:"toCol"`
+	}
+	
+	movesJSON := make([]MoveJSON, len(allMoves))
+	for i, move := range allMoves {
+		movesJSON[i] = MoveJSON{
+			FromRow: move.FromRow,
+			FromCol: move.FromCol,
+			ToRow:   move.ToRow,
+			ToCol:   move.ToCol,
+		}
+	}
+	
+	jsonBytes, err := json.Marshal(movesJSON)
+	if err != nil {
+		return js.ValueOf(map[string]interface{}{"error": err.Error()})
+	}
+	
+	return js.ValueOf(string(jsonBytes))
+}
+
+// search_subset_wasm searches only the provided moves and returns best move and score
+func search_subset_wasm(this js.Value, args []js.Value) interface{} {
+	if len(args) < 2 {
+		return js.ValueOf(map[string]interface{}{"error": "missing arguments"})
+	}
+	
+	fen := args[0].String()
+	movesJson := args[1].String()
+	
+	board := parseFEN(fen)
+	isWhiteTurn := false // For AI move, it's black's turn
+	
+	// Parse moves from JSON
+	type MoveJSON struct {
+		FromRow int `json:"fromRow"`
+		FromCol int `json:"fromCol"`
+		ToRow   int `json:"toRow"`
+		ToCol   int `json:"toCol"`
+	}
+	
+	var movesJSON []MoveJSON
+	if err := json.Unmarshal([]byte(movesJson), &movesJSON); err != nil {
+		return js.ValueOf(map[string]interface{}{"error": "invalid moves JSON: " + err.Error()})
+	}
+	
+	// Convert to handlers.Move
+	movesToSearch := make([]handlers.Move, len(movesJSON))
+	for i, m := range movesJSON {
+		movesToSearch[i] = handlers.Move{
+			FromRow: m.FromRow,
+			FromCol: m.FromCol,
+			ToRow:   m.ToRow,
+			ToCol:   m.ToCol,
+		}
+	}
+	
+	// Search the subset
+	bestMove, bestScore := handlers.SearchSpecificMoves(board, isWhiteTurn, movesToSearch)
+	
+	// Convert move to string format
+	moveString := coordsToSquare(bestMove.FromRow, bestMove.FromCol) + coordsToSquare(bestMove.ToRow, bestMove.ToCol)
+	
+	return js.ValueOf(map[string]interface{}{
+		"move":  moveString,
+		"score": bestScore,
+		"fromRow": bestMove.FromRow,
+		"fromCol": bestMove.FromCol,
+		"toRow":   bestMove.ToRow,
+		"toCol":   bestMove.ToCol,
+	})
+}
+
+// apply_move_wasm applies a move to the board and returns the new FEN
+func apply_move_wasm(this js.Value, args []js.Value) interface{} {
+	if len(args) < 2 {
+		return js.ValueOf(map[string]interface{}{"error": "missing arguments"})
+	}
+	
+	fen := args[0].String()
+	moveJson := args[1].String()
+	
+	board := parseFEN(fen)
+	
+	// Parse move from JSON
+	type MoveJSON struct {
+		FromRow int `json:"fromRow"`
+		FromCol int `json:"fromCol"`
+		ToRow   int `json:"toRow"`
+		ToCol   int `json:"toCol"`
+	}
+	
+	var moveJSON MoveJSON
+	if err := json.Unmarshal([]byte(moveJson), &moveJSON); err != nil {
+		return js.ValueOf(map[string]interface{}{"error": "invalid move JSON: " + err.Error()})
+	}
+	
+	move := Move{
+		FromRow: moveJSON.FromRow,
+		FromCol: moveJSON.FromCol,
+		ToRow:   moveJSON.ToRow,
+		ToCol:   moveJSON.ToCol,
+	}
+	
+	// Apply move using the proper Go function
+	newBoard := applyMove(board, move)
+	newFen := boardToFEN(newBoard)
+	
+	return js.ValueOf(map[string]interface{}{
+		"newFen": newFen,
 	})
 }

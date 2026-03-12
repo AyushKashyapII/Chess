@@ -483,6 +483,7 @@ func getPossibleMoves(piece rune, fromRow, fromCol int, board [8][8]rune) [][2]i
 		}
 
 	case 'K', 'k':
+		// Normal king moves (one square in any direction)
 		for dr := -1; dr <= 1; dr++ {
 			for dc := -1; dc <= 1; dc++ {
 				if dr == 0 && dc == 0 {
@@ -495,11 +496,11 @@ func getPossibleMoves(piece rune, fromRow, fromCol int, board [8][8]rune) [][2]i
 				}
 			}
 		}
-		// Castling moves with bounds checking
-		if fromCol+2 < 8 {
+		if fromCol+2 < 8 && IsCastleable(board, fromRow, fromCol, fromRow, fromCol+2) {
 			moves = append(moves, [2]int{fromRow, fromCol + 2})
 		}
-		if fromCol-2 >= 0 {
+		// Queen-side
+		if fromCol-2 >= 0 && IsCastleable(board, fromRow, fromCol, fromRow, fromCol-2) {
 			moves = append(moves, [2]int{fromRow, fromCol - 2})
 		}
 
@@ -701,6 +702,111 @@ func searchWithAspiration(board [8][8]rune, isWhiteTurn bool, depth int, alpha, 
 		tempBoard[move.FromRow][move.FromCol] = 0
 		new_hash := UpdateHashForMove(initial_hash, move, board)
 		
+		score := Minimax(tempBoard, depth, !isWhiteTurn, alpha, beta, new_hash)
+
+		if isWhiteTurn {
+			if score > bestScore {
+				bestScore = score
+				bestMove = move
+			}
+			if score > alpha {
+				alpha = score
+			}
+			if alpha >= beta {
+				break // Beta cutoff
+			}
+		} else {
+			if score < bestScore {
+				bestScore = score
+				bestMove = move
+			}
+			if score < beta {
+				beta = score
+			}
+			if alpha >= beta {
+				break // Alpha cutoff
+			}
+		}
+	}
+
+	return bestScore, bestMove
+}
+
+
+func SearchSpecificMoves(board [8][8]rune, isWhiteTurn bool, movesToSearch []Move) (Move, int) {
+	if len(movesToSearch) == 0 {
+		return Move{}, 0
+	}
+
+	const targetDepth = 3
+	const aspirationWindow = 25
+	const infinity = 100000
+	const negInfinity = -100000
+
+	initial_hash := GetZobristValue(board)
+	var bestMove Move = movesToSearch[0]
+	var bestScore int
+	var previousScore int = 0
+
+	// Iterative deepening for this subset
+	for depth := 1; depth <= targetDepth; depth++ {
+		var alpha, beta int
+		var score int
+
+		if depth > 1 {
+			alpha = previousScore - aspirationWindow
+			beta = previousScore + aspirationWindow
+
+			score, bestMove = searchMovesSubset(board, isWhiteTurn, depth, alpha, beta, initial_hash, movesToSearch, previousScore)
+
+			if score <= alpha {
+				alpha = negInfinity
+				beta = previousScore + aspirationWindow
+				score, bestMove = searchMovesSubset(board, isWhiteTurn, depth, alpha, beta, initial_hash, movesToSearch, previousScore)
+			} else if score >= beta {
+				alpha = previousScore - aspirationWindow
+				beta = infinity
+				score, bestMove = searchMovesSubset(board, isWhiteTurn, depth, alpha, beta, initial_hash, movesToSearch, previousScore)
+			}
+		} else {
+			alpha = negInfinity
+			beta = infinity
+			score, bestMove = searchMovesSubset(board, isWhiteTurn, depth, alpha, beta, initial_hash, movesToSearch, 0)
+		}
+
+		bestScore = score
+		previousScore = score
+	}
+
+	return bestMove, bestScore
+}
+
+// searchMovesSubset searches only the provided moves subset
+func searchMovesSubset(board [8][8]rune, isWhiteTurn bool, depth int, alpha, beta int, initial_hash uint64, movesToSearch []Move, previousScore int) (int, Move) {
+	const infinity = 100000
+	const negInfinity = -100000
+
+	var bestMove Move = movesToSearch[0]
+	var bestScore int
+
+	if isWhiteTurn {
+		bestScore = negInfinity
+	} else {
+		bestScore = infinity
+	}
+
+	for _, move := range movesToSearch {
+		var tempBoard [8][8]rune
+		for i := 0; i < 8; i++ {
+			for j := 0; j < 8; j++ {
+				tempBoard[i][j] = board[i][j]
+			}
+		}
+		piece := tempBoard[move.FromRow][move.FromCol]
+		tempBoard[move.ToRow][move.ToCol] = piece
+		tempBoard[move.FromRow][move.FromCol] = 0
+		new_hash := UpdateHashForMove(initial_hash, move, board)
+
 		score := Minimax(tempBoard, depth, !isWhiteTurn, alpha, beta, new_hash)
 
 		if isWhiteTurn {

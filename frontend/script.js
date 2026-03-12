@@ -103,6 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result && result.valid) {
                 if (result.newFen) {
                     boardState = fenToBoard(result.newFen);
+                    console.log('Board updated after user move, new FEN:', result.newFen);
+                } else {
+                    console.error('No newFen in validation result!');
                 }
                 fromSquare = null;
                 updateUi();
@@ -125,11 +128,208 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Helper function to split array 
+    function splitIntoChunks(array, numChunks) {
+        const chunks = [];
+        const chunkSize = Math.ceil(array.length / numChunks);
+        for (let i = 0; i < array.length; i += chunkSize) {
+            chunks.push(array.slice(i, i + chunkSize));
+        }
+        return chunks;
+    }
+
+    // Parallel search 
     async function getAiMove() {
         isAwaitingAi = true;
         updateStatus();
 
         try {
+            const fen = boardToFen();
+            console.log('Starting AI move search with FEN:', fen);
+            const numWorkers = window.chessWorkers.length;
+
+            await Promise.all(window.chessWorkers.map((worker, index) => {
+                return new Promise((resolve) => {
+                    const listener = (e) => {
+                        if (e.data.type === "INIT_BOARD_RESULT") {
+                            worker.removeEventListener("message", listener);
+                            resolve();
+                        }
+                    };
+                    worker.addEventListener("message", listener);
+                    worker.postMessage({ 
+                        type: "INIT_BOARD", 
+                        payload: { fen: fen } 
+                    });
+                });
+            }));
+            
+            console.log(`All ${numWorkers} workers initialized with FEN:`, fen);
+            
+            const allMovesJson = await new Promise((resolve) => {
+                const listener = (e) => {
+                    if (e.data.type === "GET_MOVES_RESULT") {
+                        window.chessWorkers[0].removeEventListener("message", listener);
+                        resolve(e.data.data);
+                    }
+                };
+                window.chessWorkers[0].addEventListener("message", listener);
+                window.chessWorkers[0].postMessage({ 
+                    type: "GET_ALL_MOVES", 
+                    fen: fen 
+                });
+            });
+
+            const allMoves = JSON.parse(allMovesJson);
+            console.log(`Found ${allMoves.length} legal moves, splitting across ${numWorkers} workers`);
+
+            if (allMoves.length === 0) {
+                statusElement.textContent = 'Game Over! You Won';
+                isGameOver = true;
+                isAwaitingAi = false;
+                updateUi();
+                return;
+            }
+
+            // Split moves into chunks
+            const chunks = splitIntoChunks(allMoves, numWorkers);
+            
+            // Send chunks to workers
+            let workerResults = [];
+            let completedWorkers = 0;
+
+            chunks.forEach((chunk, i) => {
+                if (chunk.length === 0) return; // Skip empty chunks
+                
+                const worker = window.chessWorkers[i];
+                const listener = (e) => {
+                    if (e.data.type === "SEARCH_SUBSET_RESULT") {
+                        worker.removeEventListener("message", listener);
+                        workerResults.push(e.data.data);
+                        completedWorkers++;
+                        
+                        // All workers finished
+                        if (completedWorkers === chunks.filter(c => c.length > 0).length) {
+                            const bestOverall = workerResults.reduce((prev, current) => 
+                                (current.score < prev.score) ? current : prev
+                            );
+                            
+                            console.log('Best move from parallel search:', bestOverall);
+                            
+                            // Apply the move using WASM (handles castling, en passant, promotion)
+                            if (bestOverall.move && bestOverall.fromRow !== undefined) {
+                                const moveJson = JSON.stringify({
+                                    fromRow: bestOverall.fromRow,
+                                    fromCol: bestOverall.fromCol,
+                                    toRow: bestOverall.toRow,
+                                    toCol: bestOverall.toCol
+                                });
+                                
+                                // Apply move through worker to get proper new FEN
+                                window.chessWorkers[0].postMessage({ 
+                                    type: "APPLY_MOVE", 
+                                    fen: fen,
+                                    moveJson: moveJson
+                                });
+                                
+                                const applyMoveListener = (e) => {
+                                    if (e.data.type === "APPLY_MOVE_RESULT") {
+                                        window.chessWorkers[0].removeEventListener("message", applyMoveListener);
+                                        
+                                        if (e.data.data.newFen) {
+                                            // Update board state from new FEN
+                                            const newFen = e.data.data.newFen;
+                                            boardState = fenToBoard(newFen);
+                                            console.log('Board updated after AI move, new FEN:', newFen);
+                                            
+                                            // Sync all workers with new board state (async, don't wait)
+                                            window.chessWorkers.forEach(worker => {
+                                                worker.postMessage({ 
+                                                    type: "INIT_BOARD", 
+                                                    payload: { fen: newFen } 
+                                                });
+                                            });
+                                            
+                                            // Check if white has moves left (white's turn = true)
+                                            window.chessWorkers[0].postMessage({ 
+                                                type: "GET_ALL_MOVES", 
+                                                fen: newFen,
+                                                isWhiteTurn: true
+                                            });
+                                            
+                                            const whiteMovesListener = (e2) => {
+                                                if (e2.data.type === "GET_MOVES_RESULT") {
+                                                    window.chessWorkers[0].removeEventListener("message", whiteMovesListener);
+                                                    const whiteMoves = JSON.parse(e2.data.data);
+                                                    
+                                                    if (whiteMoves.length === 0) {
+                                                        statusElement.textContent = "Game Over! You Lost";
+                                                        isGameOver = true;
+                                                    }
+                                                    
+                                                    console.log('Engine plays:', bestOverall.move);
+                                                    isAwaitingAi = false;
+                                                    updateUi();
+                                                }
+                                            };
+                                            window.chessWorkers[0].addEventListener("message", whiteMovesListener);
+                                        } else {
+                                            console.error('Error applying move:', e.data.data);
+                                            // Fallback: use single worker
+                                            getAiMoveSingleWorker();
+                                        }
+                                    }
+                                };
+                                window.chessWorkers[0].addEventListener("message", applyMoveListener);
+                            } else {
+                                // Fallback: use single worker
+                                getAiMoveSingleWorker();
+                            }
+                        }
+                    }
+                };
+                worker.addEventListener("message", listener);
+                worker.postMessage({ 
+                    type: "SEARCH_SUBSET", 
+                    fen: fen, 
+                    movesToSearch: chunk 
+                });
+            });
+
+        } catch (error) {
+            console.error('Error in parallel search, falling back to single worker:', error);
+            getAiMoveSingleWorker();
+        }
+    }
+
+    // Helper to convert square to row/col
+    function squareToRow(square) {
+        return 8 - parseInt(square[1]);
+    }
+
+    function squareToCol(square) {
+        return square.charCodeAt(0) - 'a'.charCodeAt(0);
+    }
+
+    // Fallback: single worker search (original method)
+    async function getAiMoveSingleWorker() {
+        try {
+            // Initialize worker with current FEN before getting AI move
+            const fen = boardToFen();
+            await new Promise((resolve) => {
+                const listener = (e) => {
+                    if (e.data.type === "INIT_BOARD_RESULT") {
+                        window.chessWorker.removeEventListener("message", listener);
+                        resolve();
+                    }
+                };
+                window.chessWorker.addEventListener("message", listener);
+                window.chessWorker.postMessage({ 
+                    type: "INIT_BOARD", 
+                    payload: { fen: fen } 
+                });
+            });
+            
             const aiMove = await callWorker("GET_AI_MOVE", {});
             console.log('AI move received (Worker):', aiMove);
 
@@ -141,7 +341,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (aiMove.newFen) {
                     boardState = fenToBoard(aiMove.newFen);
                 }
-                // Log the move in string format (like engine_cli.go)
                 if (aiMove.move) {
                     console.log('Engine plays:', aiMove.move);
                 }
@@ -149,7 +348,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusElement.textContent = 'Game Over! You Won';
                 isGameOver = true;
             }
-
         } catch (error) {
             console.error('Error getting AI move:', error);
             statusElement.textContent = 'Error: ' + error.message;

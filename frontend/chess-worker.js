@@ -12,12 +12,13 @@ WebAssembly.instantiateStreaming(fetch("chess.wasm"), go.importObject).then((res
 });
 
 onmessage = function (e) {
-    const { type, payload } = e.data;
+    const { type, payload, fen, movesToSearch } = e.data;
 
     switch (type) {
         case "INIT_BOARD":
-            console.log("Worker: Initializing board");
+            console.log("Worker: Initializing board with FEN:", payload.fen);
             self.init_board_wasm(payload.fen);
+            postMessage({ type: "INIT_BOARD_RESULT" });
             break;
         case "VALIDATE_MOVE":
             console.log("Worker: Validating move string", payload);
@@ -30,6 +31,25 @@ onmessage = function (e) {
             // Use string format function
             const aiResult = self.get_ai_move_string_wasm();
             postMessage({ type: "GET_AI_MOVE_RESULT", payload: aiResult });
+            break;
+        case "GET_ALL_MOVES":
+            console.log("Worker: Getting all legal moves for FEN:", fen);
+            // Get isWhiteTurn from payload, default to false (black's turn)
+            const isWhiteTurn = e.data.isWhiteTurn !== undefined ? e.data.isWhiteTurn : false;
+            const movesJson = self.get_all_legal_moves_wasm(fen, isWhiteTurn);
+            postMessage({ type: "GET_MOVES_RESULT", data: movesJson });
+            break;
+        case "SEARCH_SUBSET":
+            // Root splitting: search only the assigned moves
+            console.log("Worker: Searching subset of moves", movesToSearch);
+            const resultJson = self.search_subset_wasm(fen, JSON.stringify(movesToSearch));
+            postMessage({ type: "SEARCH_SUBSET_RESULT", data: resultJson });
+            break;
+        case "APPLY_MOVE":
+            // Apply a move and return new FEN
+            const moveJson = e.data.moveJson;
+            const applyResult = self.apply_move_wasm(e.data.fen, moveJson);
+            postMessage({ type: "APPLY_MOVE_RESULT", data: applyResult });
             break;
     }
 };
