@@ -3,4 +3,3 @@ piece_move_logic
 .gitignore
 tmp
 chess-gui
-chess.wasm
