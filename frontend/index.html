@@ -19,8 +19,16 @@
 
     <div id="status">White to move</div>
 
-    <!-- THIS BUTTON WAS MISSING. ADD IT BACK. -->
-    <button id="restart-button">New Game</button>
+    <button type="button" id="restart-button">New Game</button>
+
+    <div id="game-over-overlay" class="game-over-overlay hidden" aria-hidden="true">
+        <div id="game-over-card" class="game-over-card" role="dialog" aria-labelledby="game-over-title" aria-describedby="game-over-subtitle">
+            <div id="game-over-badge" class="game-over-badge" aria-hidden="true"></div>
+            <h2 id="game-over-title" class="game-over-title"></h2>
+            <p id="game-over-subtitle" class="game-over-subtitle"></p>
+            <button type="button" id="game-over-restart" class="game-over-restart">Play again</button>
+        </div>
+    </div>
 
     <script src="wasm_exec.js"></script>
     <script src="wasm-init.js"></script>

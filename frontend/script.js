@@ -15,6 +15,37 @@ document.addEventListener('DOMContentLoaded', () => {
     let fromSquare = null;
     let isAwaitingAi = false;
     let isGameOver = false;
+    /** @type {null | 'win' | 'lose'} */
+    let gameOutcome = null;
+
+    function endGame(outcome) {
+        isGameOver = true;
+        gameOutcome = outcome;
+        const overlay = document.getElementById('game-over-overlay');
+        const card = document.getElementById('game-over-card');
+        const title = document.getElementById('game-over-title');
+        const subtitle = document.getElementById('game-over-subtitle');
+        overlay.classList.remove('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+        card.classList.remove('win', 'lose');
+        card.classList.add(outcome === 'win' ? 'win' : 'lose');
+        if (outcome === 'win') {
+            title.textContent = 'You won';
+            subtitle.textContent = 'The AI lost — no legal moves left.';
+        } else {
+            title.textContent = 'You lost';
+            subtitle.textContent = 'The AI won this game.';
+        }
+        updateStatus();
+    }
+
+    function hideGameOverUi() {
+        const overlay = document.getElementById('game-over-overlay');
+        const card = document.getElementById('game-over-card');
+        overlay.classList.add('hidden');
+        overlay.setAttribute('aria-hidden', 'true');
+        card.classList.remove('win', 'lose');
+    }
 
     // Helper to send messages to the worker and return a promise
     function callWorker(type, payload) {
@@ -33,6 +64,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleSquareClick(row, col) {
         console.log('Clicked:', row, col);
+
+        if (isGameOver) {
+            return;
+        }
 
         if (isAwaitingAi) {
             console.log('Waiting for AI, click ignored');
@@ -184,8 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`Found ${allMoves.length} legal moves, splitting across ${numWorkers} workers`);
 
             if (allMoves.length === 0) {
-                statusElement.textContent = 'Game Over! You Won';
-                isGameOver = true;
+                endGame('win');
                 isAwaitingAi = false;
                 updateUi();
                 return;
@@ -263,8 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                     const whiteMoves = JSON.parse(e2.data.data);
                                                     
                                                     if (whiteMoves.length === 0) {
-                                                        statusElement.textContent = "Game Over! You Lost";
-                                                        isGameOver = true;
+                                                        endGame('lose');
                                                     }
                                                     
                                                     console.log('Engine plays:', bestOverall.move);
@@ -335,8 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (aiMove && aiMove.valid) {
                 if (!aiMove.gamestatus) {
-                    statusElement.textContent = "Game Over! You Lost";
-                    isGameOver = true;
+                    endGame('lose');
                 }
                 if (aiMove.newFen) {
                     boardState = fenToBoard(aiMove.newFen);
@@ -345,8 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log('Engine plays:', aiMove.move);
                 }
             } else {
-                statusElement.textContent = 'Game Over! You Won';
-                isGameOver = true;
+                endGame('win');
             }
         } catch (error) {
             console.error('Error getting AI move:', error);
@@ -395,8 +426,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateStatus() {
-        if (isGameOver) {
-            statusElement.textContent = "Game Over!!!"
+        if (isGameOver && gameOutcome) {
+            statusElement.textContent =
+                gameOutcome === 'win'
+                    ? 'You won — the AI lost'
+                    : 'You lost — the AI won';
         } else if (isAwaitingAi) {
             statusElement.textContent = 'Black is thinking...';
         } else {
@@ -477,6 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
         fromSquare = null;
         isAwaitingAi = false;
         isGameOver = false;
+        gameOutcome = null;
+        hideGameOverUi();
         statusElement.textContent = 'White to move';
         updateUi();
     }
@@ -487,5 +523,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     restartButton.addEventListener('click', initGame);
+    document.getElementById('game-over-restart').addEventListener('click', initGame);
     // Don't call initGame() directly here anymore, wasm-init.js will call window.onChessWorkerReady
 });

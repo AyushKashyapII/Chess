@@ -92,3 +92,128 @@ h1 {
 #restart-button:hover {
     background-color: #8aa879;
 }
+
+/* --- Game over overlay --- */
+.game-over-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(10, 10, 12, 0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: overlayFadeIn 0.25s ease-out;
+}
+
+.game-over-overlay.hidden {
+    display: none;
+}
+
+@keyframes overlayFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes cardPopIn {
+    from {
+        opacity: 0;
+        transform: scale(0.94) translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.game-over-card {
+    width: 100%;
+    max-width: 380px;
+    padding: 2rem 1.75rem 1.75rem;
+    text-align: center;
+    border-radius: 16px;
+    background: linear-gradient(165deg, #3d3935 0%, #262421 45%, #1f1d1b 100%);
+    border: 1px solid rgba(240, 217, 181, 0.12);
+    box-shadow:
+        0 24px 48px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+    animation: cardPopIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.game-over-card.win {
+    border-color: rgba(106, 153, 78, 0.45);
+    box-shadow:
+        0 24px 48px rgba(0, 0, 0, 0.45),
+        0 0 32px rgba(106, 153, 78, 0.12),
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+
+.game-over-card.lose {
+    border-color: rgba(188, 71, 73, 0.4);
+    box-shadow:
+        0 24px 48px rgba(0, 0, 0, 0.45),
+        0 0 32px rgba(188, 71, 73, 0.1),
+        0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+
+.game-over-badge {
+    font-size: 3rem;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+}
+
+.game-over-card.win .game-over-badge::before {
+    content: "♔";
+    color: #e8e0d5;
+}
+
+.game-over-card.lose .game-over-badge::before {
+    content: "♚";
+    color: #c4b8a8;
+}
+
+.game-over-title {
+    margin: 0 0 0.5rem;
+    font-size: 1.65rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #f5efe6;
+}
+
+.game-over-subtitle {
+    margin: 0 0 1.5rem;
+    font-size: 1rem;
+    line-height: 1.45;
+    color: rgba(240, 217, 181, 0.72);
+    font-weight: 400;
+}
+
+.game-over-restart {
+    width: 100%;
+    padding: 12px 20px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    background: linear-gradient(180deg, #7fb069 0%, #6a994e 100%);
+    box-shadow: 0 4px 14px rgba(106, 153, 78, 0.35);
+    transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.game-over-restart:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 6px 20px rgba(106, 153, 78, 0.42);
+}
+
+.game-over-restart:active {
+    transform: scale(0.98);
+}
