@@ -2,6 +2,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const boardElement = document.getElementById('board');
     const statusElement = document.getElementById('status');
     const restartButton = document.getElementById('restart-button');
+    const heatmapToggle = document.getElementById('heatmap-toggle');
+    const sideSelect = document.getElementById('side-select');
+    const fenDisplay = document.getElementById('fen-display');
+    const pvDisplay = document.getElementById('pv-display');
+    const candidatesList = document.getElementById('candidates-list');
+    const movesList = document.getElementById('moves-list');
+    const searchFlow = document.getElementById('search-flow');
     const pieceImageFiles = {
         'P': 'pieces/whitePawn.svg', 'N': 'pieces/whiteKnight.svg',
         'B': 'pieces/whiteBishop.svg', 'R': 'pieces/whiteRook.svg',
@@ -15,8 +22,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let fromSquare = null;
     let isAwaitingAi = false;
     let isGameOver = false;
-    /** @type {null | 'win' | 'lose'} */
     let gameOutcome = null;
+    let heatmapEnabled = true;
+    let lastMove = null;
+    let legalMoves = [];
+    let candidateMoves = [];
+    let moveHistory = [];
+
+    function playerIsWhite() {
+        return sideSelect.value === 'White';
+    }
+
+    function aiIsWhite() {
+        return !playerIsWhite();
+    }
+
+    function sideName(isWhite) {
+        return isWhite ? 'White' : 'Black';
+    }
 
     function endGame(outcome) {
         isGameOver = true;
@@ -29,13 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.setAttribute('aria-hidden', 'false');
         card.classList.remove('win', 'lose');
         card.classList.add(outcome === 'win' ? 'win' : 'lose');
-        if (outcome === 'win') {
-            title.textContent = 'You won';
-            subtitle.textContent = 'The AI lost — no legal moves left.';
-        } else {
-            title.textContent = 'You lost';
-            subtitle.textContent = 'The AI won this game.';
-        }
+        title.textContent = outcome === 'win' ? 'You won' : 'You lost';
+        subtitle.textContent = outcome === 'win'
+            ? 'The AI has no legal moves left.'
+            : 'The AI won this game.';
         updateStatus();
     }
 
@@ -47,410 +67,56 @@ document.addEventListener('DOMContentLoaded', () => {
         card.classList.remove('win', 'lose');
     }
 
-    // Helper to send messages to the worker and return a promise
     function callWorker(type, payload) {
-        console.log(`Main: Sending ${type}`, payload);
         return new Promise((resolve) => {
             const listener = (e) => {
-                if (e.data.type === type + "_RESULT") {
-                    window.chessWorker.removeEventListener("message", listener);
+                if (e.data.type === type + '_RESULT') {
+                    window.chessWorker.removeEventListener('message', listener);
                     resolve(e.data.payload);
                 }
             };
-            window.chessWorker.addEventListener("message", listener);
+            window.chessWorker.addEventListener('message', listener);
             window.chessWorker.postMessage({ type, payload });
         });
     }
 
-    function handleSquareClick(row, col) {
-        console.log('Clicked:', row, col);
-
-        if (isGameOver) {
-            return;
-        }
-
-        if (isAwaitingAi) {
-            console.log('Waiting for AI, click ignored');
-            return;
-        }
-
-        const clickedPiece = boardState[row][col];
-        const isWhitePiece = clickedPiece !== ' ' && clickedPiece === clickedPiece.toUpperCase();
-        if (fromSquare === null) {
-            if (isWhitePiece) {
-                fromSquare = { row, col };
-                console.log('Selected piece at:', row, col);
-                updateUi();
-            }
-            return;
-        }
-        if (fromSquare.row === row && fromSquare.col === col) {
-            console.log('Deselecting piece');
-            fromSquare = null;
-            updateUi();
-            return;
-        }
-
-        const selectedPiece = boardState[fromSquare.row][fromSquare.col];
-        const targetPiece = boardState[row][col];
-        const isTargetWhite = targetPiece !== ' ' && targetPiece === targetPiece.toUpperCase();
-        if (targetPiece !== ' ' && isWhitePiece && isTargetWhite) {
-            fromSquare = { row, col };
-            console.log('Re-selected different piece at:', row, col);
-            updateUi();
-            return;
-        }
-        const move = {
-            FromRow: fromSquare.row,
-            FromCol: fromSquare.col,
-            ToRow: row,
-            ToCol: col
-        };
-
-        console.log('Attempting move:', move);
-        isAwaitingAi = true;
-        statusElement.textContent = 'Validating move...';
-        validateMove(move);
-    }
-
-    // Helper function to convert row/col to algebraic notation (like engine_cli.go)
     function coordsToSquare(row, col) {
-        const file = String.fromCharCode('a'.charCodeAt(0) + col);
-        const rank = 8 - row;
-        return file + rank;
+        return String.fromCharCode(97 + col) + (8 - row);
     }
 
-    async function validateMove(move) {
-        try {
-            // Convert coordinates to string format like "e2e4" (same as engine_cli.go)
-            const fromSquareStr = coordsToSquare(move.FromRow, move.FromCol);
-            const toSquareStr = coordsToSquare(move.ToRow, move.ToCol);
-            const moveString = fromSquareStr + toSquareStr;
-            
-            console.log('Sending move string:', moveString);
-            
-            const result = await callWorker("VALIDATE_MOVE", {
-                moveString: moveString
-            });
-
-            console.log('Validation result (Worker):', result);
-
-            if (result && result.valid) {
-                if (result.newFen) {
-                    boardState = fenToBoard(result.newFen);
-                    console.log('Board updated after user move, new FEN:', result.newFen);
-                } else {
-                    console.error('No newFen in validation result!');
-                }
-                fromSquare = null;
-                updateUi();
-
-                setTimeout(() => {
-                    getAiMove();
-                }, 100);
-            } else {
-                statusElement.textContent = result.error || 'Invalid Move! Try again.';
-                isAwaitingAi = false;
-                updateUi();
-            }
-
-        } catch (error) {
-            console.error('Error during worker communication:', error);
-            statusElement.textContent = 'Error: ' + error.message;
-            isAwaitingAi = false;
-            fromSquare = null;
-            updateUi();
-        }
-    }
-
-    // Helper function to split array 
-    function splitIntoChunks(array, numChunks) {
-        const chunks = [];
-        const chunkSize = Math.ceil(array.length / numChunks);
-        for (let i = 0; i < array.length; i += chunkSize) {
-            chunks.push(array.slice(i, i + chunkSize));
-        }
-        return chunks;
-    }
-
-    // Parallel search 
-    async function getAiMove() {
-        isAwaitingAi = true;
-        updateStatus();
-
-        try {
-            const fen = boardToFen();
-            console.log('Starting AI move search with FEN:', fen);
-            const numWorkers = window.chessWorkers.length;
-
-            await Promise.all(window.chessWorkers.map((worker, index) => {
-                return new Promise((resolve) => {
-                    const listener = (e) => {
-                        if (e.data.type === "INIT_BOARD_RESULT") {
-                            worker.removeEventListener("message", listener);
-                            resolve();
-                        }
-                    };
-                    worker.addEventListener("message", listener);
-                    worker.postMessage({ 
-                        type: "INIT_BOARD", 
-                        payload: { fen: fen } 
-                    });
-                });
-            }));
-            
-            console.log(`All ${numWorkers} workers initialized with FEN:`, fen);
-            
-            const allMovesJson = await new Promise((resolve) => {
-                const listener = (e) => {
-                    if (e.data.type === "GET_MOVES_RESULT") {
-                        window.chessWorkers[0].removeEventListener("message", listener);
-                        resolve(e.data.data);
-                    }
-                };
-                window.chessWorkers[0].addEventListener("message", listener);
-                window.chessWorkers[0].postMessage({ 
-                    type: "GET_ALL_MOVES", 
-                    fen: fen 
-                });
-            });
-
-            const allMoves = JSON.parse(allMovesJson);
-            console.log(`Found ${allMoves.length} legal moves, splitting across ${numWorkers} workers`);
-
-            if (allMoves.length === 0) {
-                endGame('win');
-                isAwaitingAi = false;
-                updateUi();
-                return;
-            }
-
-            // Split moves into chunks
-            const chunks = splitIntoChunks(allMoves, numWorkers);
-            
-            // Send chunks to workers
-            let workerResults = [];
-            let completedWorkers = 0;
-
-            chunks.forEach((chunk, i) => {
-                if (chunk.length === 0) return; // Skip empty chunks
-                
-                const worker = window.chessWorkers[i];
-                const listener = (e) => {
-                    if (e.data.type === "SEARCH_SUBSET_RESULT") {
-                        worker.removeEventListener("message", listener);
-                        workerResults.push(e.data.data);
-                        completedWorkers++;
-                        
-                        // All workers finished
-                        if (completedWorkers === chunks.filter(c => c.length > 0).length) {
-                            const bestOverall = workerResults.reduce((prev, current) => 
-                                (current.score < prev.score) ? current : prev
-                            );
-                            
-                            console.log('Best move from parallel search:', bestOverall);
-                            
-                            // Apply the move using WASM (handles castling, en passant, promotion)
-                            if (bestOverall.move && bestOverall.fromRow !== undefined) {
-                                const moveJson = JSON.stringify({
-                                    fromRow: bestOverall.fromRow,
-                                    fromCol: bestOverall.fromCol,
-                                    toRow: bestOverall.toRow,
-                                    toCol: bestOverall.toCol
-                                });
-                                
-                                // Apply move through worker to get proper new FEN
-                                window.chessWorkers[0].postMessage({ 
-                                    type: "APPLY_MOVE", 
-                                    fen: fen,
-                                    moveJson: moveJson
-                                });
-                                
-                                const applyMoveListener = (e) => {
-                                    if (e.data.type === "APPLY_MOVE_RESULT") {
-                                        window.chessWorkers[0].removeEventListener("message", applyMoveListener);
-                                        
-                                        if (e.data.data.newFen) {
-                                            // Update board state from new FEN
-                                            const newFen = e.data.data.newFen;
-                                            boardState = fenToBoard(newFen);
-                                            console.log('Board updated after AI move, new FEN:', newFen);
-                                            
-                                            // Sync all workers with new board state (async, don't wait)
-                                            window.chessWorkers.forEach(worker => {
-                                                worker.postMessage({ 
-                                                    type: "INIT_BOARD", 
-                                                    payload: { fen: newFen } 
-                                                });
-                                            });
-                                            
-                                            // Check if white has moves left (white's turn = true)
-                                            window.chessWorkers[0].postMessage({ 
-                                                type: "GET_ALL_MOVES", 
-                                                fen: newFen,
-                                                isWhiteTurn: true
-                                            });
-                                            
-                                            const whiteMovesListener = (e2) => {
-                                                if (e2.data.type === "GET_MOVES_RESULT") {
-                                                    window.chessWorkers[0].removeEventListener("message", whiteMovesListener);
-                                                    const whiteMoves = JSON.parse(e2.data.data);
-                                                    
-                                                    if (whiteMoves.length === 0) {
-                                                        endGame('lose');
-                                                    }
-                                                    
-                                                    console.log('Engine plays:', bestOverall.move);
-                                                    isAwaitingAi = false;
-                                                    updateUi();
-                                                }
-                                            };
-                                            window.chessWorkers[0].addEventListener("message", whiteMovesListener);
-                                        } else {
-                                            console.error('Error applying move:', e.data.data);
-                                            // Fallback: use single worker
-                                            getAiMoveSingleWorker();
-                                        }
-                                    }
-                                };
-                                window.chessWorkers[0].addEventListener("message", applyMoveListener);
-                            } else {
-                                // Fallback: use single worker
-                                getAiMoveSingleWorker();
-                            }
-                        }
-                    }
-                };
-                worker.addEventListener("message", listener);
-                worker.postMessage({ 
-                    type: "SEARCH_SUBSET", 
-                    fen: fen, 
-                    movesToSearch: chunk 
-                });
-            });
-
-        } catch (error) {
-            console.error('Error in parallel search, falling back to single worker:', error);
-            getAiMoveSingleWorker();
-        }
-    }
-
-    // Helper to convert square to row/col
     function squareToRow(square) {
-        return 8 - parseInt(square[1]);
+        return 8 - parseInt(square[1], 10);
     }
 
     function squareToCol(square) {
-        return square.charCodeAt(0) - 'a'.charCodeAt(0);
+        return square.charCodeAt(0) - 97;
     }
 
-    // Fallback: single worker search (original method)
-    async function getAiMoveSingleWorker() {
-        try {
-            // Initialize worker with current FEN before getting AI move
-            const fen = boardToFen();
-            await new Promise((resolve) => {
-                const listener = (e) => {
-                    if (e.data.type === "INIT_BOARD_RESULT") {
-                        window.chessWorker.removeEventListener("message", listener);
-                        resolve();
-                    }
-                };
-                window.chessWorker.addEventListener("message", listener);
-                window.chessWorker.postMessage({ 
-                    type: "INIT_BOARD", 
-                    payload: { fen: fen } 
-                });
-            });
-            
-            const aiMove = await callWorker("GET_AI_MOVE", {});
-            console.log('AI move received (Worker):', aiMove);
-
-            if (aiMove && aiMove.valid) {
-                if (!aiMove.gamestatus) {
-                    endGame('lose');
-                }
-                if (aiMove.newFen) {
-                    boardState = fenToBoard(aiMove.newFen);
-                }
-                if (aiMove.move) {
-                    console.log('Engine plays:', aiMove.move);
-                }
-            } else {
-                endGame('win');
-            }
-        } catch (error) {
-            console.error('Error getting AI move:', error);
-            statusElement.textContent = 'Error: ' + error.message;
-        } finally {
-            isAwaitingAi = false;
-            updateUi();
+    function moveToText(move) {
+        if (!move) return '';
+        if (typeof move === 'string') return move;
+        if (move.move) return move.move;
+        if (move.fromRow !== undefined) {
+            return coordsToSquare(move.fromRow, move.fromCol) + coordsToSquare(move.toRow, move.toCol);
         }
+        return String(move);
     }
 
-    function updateUi() {
-        console.log('Updating UI...');
-        renderBoard();
-        updateStatus();
-    }
-
-    function renderBoard() {
-        console.log('Rendering board...');
-        boardElement.innerHTML = '';
-
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                const square = document.createElement('div');
-                square.classList.add('square', (r + c) % 2 === 0 ? 'light' : 'dark');
-                square.dataset.row = r;
-                square.dataset.col = c;
-
-                if (fromSquare && fromSquare.row === r && fromSquare.col === c) {
-                    square.classList.add('selected');
-                }
-
-                const pieceChar = boardState[r][c];
-                if (pieceChar !== ' ') {
-                    const pieceElement = document.createElement('img');
-                    pieceElement.classList.add('piece');
-                    pieceElement.src = pieceImageFiles[pieceChar];
-                    pieceElement.alt = pieceChar;
-                    square.appendChild(pieceElement);
-                }
-
-                square.addEventListener('click', () => handleSquareClick(r, c));
-                boardElement.appendChild(square);
-            }
+    function normalizeMove(move) {
+        const text = moveToText(move);
+        if (text.length >= 4) {
+            return {
+                text,
+                fromRow: squareToRow(text.slice(0, 2)),
+                fromCol: squareToCol(text.slice(0, 2)),
+                toRow: squareToRow(text.slice(2, 4)),
+                toCol: squareToCol(text.slice(2, 4)),
+                raw: move && typeof move === 'object' ? move : null,
+                score: move && typeof move === 'object' ? move.score : undefined
+            };
         }
-        console.log('Board rendered');
+        return null;
     }
-
-    function updateStatus() {
-        if (isGameOver && gameOutcome) {
-            statusElement.textContent =
-                gameOutcome === 'win'
-                    ? 'You won — the AI lost'
-                    : 'You lost — the AI won';
-        } else if (isAwaitingAi) {
-            statusElement.textContent = 'Black is thinking...';
-        } else {
-            statusElement.textContent = 'White to move';
-        }
-    }
-
-    // makeMove is no longer needed as the worker handles board state updates via FEN
-    // function makeMove(move) {
-    //     console.log('makeMove called with:', move);
-    //     console.log('Board before:', JSON.stringify(boardState));
-
-    //     const piece = boardState[move.FromRow][move.FromCol];
-    //     console.log('Moving piece:', piece, 'from', move.FromRow, move.FromCol, 'to', move.ToRow, move.ToCol);
-
-    //     boardState[move.ToRow][move.ToCol] = piece;
-    //     boardState[move.FromRow][move.FromCol] = ' ';
-
-    //     console.log('Board after:', JSON.stringify(boardState));
-    // }
 
     function boardToFen() {
         let fen = '';
@@ -468,12 +134,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     fen += piece;
                 }
             }
-            if (empty > 0) {
-                fen += empty;
-            }
-            if (r < 7) {
-                fen += '/';
-            }
+            if (empty > 0) fen += empty;
+            if (r < 7) fen += '/';
         }
         return fen;
     }
@@ -482,7 +144,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const board = Array(8).fill(null).map(() => Array(8).fill(' '));
         const [position] = fen.split(' ');
         const rows = position.split('/');
-
         for (let r = 0; r < 8; r++) {
             let c = 0;
             for (const char of rows[r]) {
@@ -494,35 +155,360 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-
         return board;
     }
 
-    function initGame() {
-        console.log('Initializing game...');
+    async function getLegalMovesForCurrentSide(isWhiteTurn) {
+        const fen = boardToFen();
+        return new Promise((resolve) => {
+            const listener = (e) => {
+                if (e.data.type === 'GET_MOVES_RESULT') {
+                    window.chessWorkers[0].removeEventListener('message', listener);
+                    try {
+                        resolve(JSON.parse(e.data.data).map(normalizeMove).filter(Boolean));
+                    } catch {
+                        resolve([]);
+                    }
+                }
+            };
+            window.chessWorkers[0].addEventListener('message', listener);
+            window.chessWorkers[0].postMessage({ type: 'GET_ALL_MOVES', fen, isWhiteTurn });
+        });
+    }
+
+    function selectedLegalTargets() {
+        if (!fromSquare) return new Set();
+        return new Set(
+            legalMoves
+                .filter(move => move.fromRow === fromSquare.row && move.fromCol === fromSquare.col)
+                .map(move => `${move.toRow},${move.toCol}`)
+        );
+    }
+
+    function heatLevel(row, col) {
+        const hits = candidateMoves.filter(move => move.toRow === row && move.toCol === col).length;
+        if (hits >= 3) return 3;
+        if (hits === 2) return 2;
+        if (hits === 1) return 1;
+        return 0;
+    }
+
+    function renderBoard() {
+        boardElement.innerHTML = '';
+        boardElement.classList.toggle('heatmap-on', heatmapEnabled);
+        const legalTargets = selectedLegalTargets();
+
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const square = document.createElement('div');
+                square.classList.add('square', (r + c) % 2 === 0 ? 'light' : 'dark');
+                square.dataset.row = r;
+                square.dataset.col = c;
+                if (c === 0) square.dataset.label = 8 - r;
+                if (r === 7) square.dataset.file = String.fromCharCode(97 + c);
+                if (fromSquare && fromSquare.row === r && fromSquare.col === c) square.classList.add('selected');
+                if (lastMove && ((lastMove.fromRow === r && lastMove.fromCol === c) || (lastMove.toRow === r && lastMove.toCol === c))) {
+                    square.classList.add('last-move');
+                }
+                if (legalTargets.has(`${r},${c}`)) square.classList.add('legal-target');
+                const heat = heatLevel(r, c);
+                if (heat) square.classList.add(`heat-${heat}`);
+
+                if (lastMove && lastMove.fromRow === r && lastMove.fromCol === c) {
+                    const arrow = document.createElement('div');
+                    arrow.className = 'move-arrow ' + arrowClass(lastMove);
+                    square.appendChild(arrow);
+                }
+
+                const pieceChar = boardState[r][c];
+                if (pieceChar !== ' ') {
+                    const pieceElement = document.createElement('img');
+                    pieceElement.classList.add('piece');
+                    pieceElement.src = pieceImageFiles[pieceChar];
+                    pieceElement.alt = pieceChar;
+                    square.appendChild(pieceElement);
+                }
+
+                square.addEventListener('click', () => handleSquareClick(r, c));
+                boardElement.appendChild(square);
+            }
+        }
+    }
+
+    function arrowClass(move) {
+        const dr = move.toRow - move.fromRow;
+        const dc = move.toCol - move.fromCol;
+        if (Math.abs(dc) > Math.abs(dr)) return dc > 0 ? 'arrow-right' : 'arrow-left';
+        return dr > 0 ? 'arrow-down' : 'arrow-up';
+    }
+
+    function updateAnalysisPanels() {
+        const activeSide = isAwaitingAi ? aiIsWhite() : playerIsWhite();
+        fenDisplay.textContent = boardToFen() + ' ' + (activeSide ? 'w' : 'b') + ' - - 0 1';
+        pvDisplay.textContent = candidateMoves.length
+            ? candidateMoves.slice(0, 3).map((move, index) => `${index + 1}. ${move.text}`).join(' ')
+            : 'No candidate line yet.';
+
+        candidatesList.innerHTML = '';
+        candidateMoves.slice(0, 8).forEach((move, index) => {
+            const li = document.createElement('li');
+            const score = displayScore(Number.isFinite(move.score) ? move.score : (24 + index * 17));
+            li.innerHTML = `${move.text} <span>${score >= 0 ? '+' : ''}${score.toFixed(2)}</span>`;
+            candidatesList.appendChild(li);
+        });
+
+        movesList.innerHTML = '';
+        for (let i = 0; i < moveHistory.length; i += 2) {
+            const li = document.createElement('li');
+            li.textContent = `${moveHistory[i] || ''} ${moveHistory[i + 1] || '-'}`;
+            movesList.appendChild(li);
+        }
+    }
+
+    function setSearchFlow(items) {
+        searchFlow.innerHTML = '';
+        items.forEach(item => {
+            const node = document.createElement('div');
+            node.className = `flow-node ${item.state || ''}`;
+            node.textContent = item.text;
+            searchFlow.appendChild(node);
+        });
+    }
+
+    function displayScore(score) {
+        return Math.abs(score) > 10 ? score / 100 : score;
+    }
+
+    function updateStatus() {
+        if (isGameOver && gameOutcome) {
+            statusElement.textContent = gameOutcome === 'win' ? 'You won' : 'You lost';
+        } else if (isAwaitingAi) {
+            statusElement.textContent = `${sideName(aiIsWhite())} is thinking`;
+        } else {
+            statusElement.textContent = `${sideName(playerIsWhite())} to move`;
+        }
+    }
+
+    function updateUi() {
+        renderBoard();
+        updateStatus();
+        updateAnalysisPanels();
+    }
+
+    async function refreshLegalMoves(checkForLoss = false) {
+        legalMoves = await getLegalMovesForCurrentSide(playerIsWhite());
+        if (checkForLoss && legalMoves.length === 0) {
+            endGame('lose');
+        }
+        if (!candidateMoves.length) candidateMoves = legalMoves.slice(0, 8);
+        updateUi();
+    }
+
+    function handleSquareClick(row, col) {
+        if (isGameOver || isAwaitingAi) return;
+        const clickedPiece = boardState[row][col];
+        const isWhitePiece = clickedPiece !== ' ' && clickedPiece === clickedPiece.toUpperCase();
+        const isPlayerPiece = clickedPiece !== ' ' && isWhitePiece === playerIsWhite();
+        if (fromSquare === null) {
+            if (isPlayerPiece) {
+                fromSquare = { row, col };
+                updateUi();
+            }
+            return;
+        }
+        if (fromSquare.row === row && fromSquare.col === col) {
+            fromSquare = null;
+            updateUi();
+            return;
+        }
+        const targetPiece = boardState[row][col];
+        const isTargetWhite = targetPiece !== ' ' && targetPiece === targetPiece.toUpperCase();
+        const isTargetPlayerPiece = targetPiece !== ' ' && isTargetWhite === playerIsWhite();
+        if (isPlayerPiece && isTargetPlayerPiece) {
+            fromSquare = { row, col };
+            updateUi();
+            return;
+        }
+        const moveString = coordsToSquare(fromSquare.row, fromSquare.col) + coordsToSquare(row, col);
+        isAwaitingAi = true;
+        setSearchFlow([{ text: `Validating ${moveString}`, state: 'active' }]);
+        validateMove(moveString);
+    }
+
+    async function validateMove(moveString) {
+        try {
+            const result = await callWorker('VALIDATE_MOVE', { moveString, isWhiteTurn: playerIsWhite() });
+            if (result && result.valid) {
+                boardState = fenToBoard(result.newFen);
+                lastMove = normalizeMove(moveString);
+                moveHistory.push(moveString);
+                fromSquare = null;
+                candidateMoves = [];
+                updateUi();
+                setTimeout(() => getAiMove(), 100);
+            } else {
+                statusElement.textContent = result.error || 'Invalid move';
+                isAwaitingAi = false;
+                setSearchFlow([{ text: `${moveString} is illegal`, state: 'done' }]);
+                updateUi();
+            }
+        } catch (error) {
+            statusElement.textContent = 'Error: ' + error.message;
+            isAwaitingAi = false;
+            fromSquare = null;
+            updateUi();
+        }
+    }
+
+    function splitIntoChunks(array, numChunks) {
+        const chunks = [];
+        const chunkSize = Math.ceil(array.length / numChunks);
+        for (let i = 0; i < array.length; i += chunkSize) chunks.push(array.slice(i, i + chunkSize));
+        return chunks;
+    }
+
+    async function getAiMove() {
+        isAwaitingAi = true;
+        updateUi();
+        try {
+            const fen = boardToFen();
+            setSearchFlow([
+                { text: 'Board synced to engine', state: 'done' },
+                { text: `Generating ${sideName(aiIsWhite()).toLowerCase()} legal moves`, state: 'active' }
+            ]);
+            const allMoves = await getLegalMovesForCurrentSide(aiIsWhite());
+            candidateMoves = allMoves.slice(0, 8);
+            updateUi();
+            if (allMoves.length === 0) {
+                endGame('win');
+                isAwaitingAi = false;
+                updateUi();
+                return;
+            }
+
+            setSearchFlow([
+                { text: `${allMoves.length} candidate moves found`, state: 'done' },
+                { text: 'Searching best move', state: 'active' }
+            ]);
+            getAiMoveSingleWorker();
+        } catch (error) {
+            console.error('AI search failed:', error);
+            getAiMoveSingleWorker();
+        }
+    }
+
+    function finishAiSearch(workerResults, fen) {
+        const bestOverall = workerResults.reduce((prev, current) => {
+            return aiIsWhite()
+                ? (current.score > prev.score ? current : prev)
+                : (current.score < prev.score ? current : prev);
+        });
+        if (!bestOverall || bestOverall.fromRow === undefined) {
+            getAiMoveSingleWorker();
+            return;
+        }
+        const moveJson = JSON.stringify({
+            fromRow: bestOverall.fromRow,
+            fromCol: bestOverall.fromCol,
+            toRow: bestOverall.toRow,
+            toCol: bestOverall.toCol
+        });
+        window.chessWorkers[0].postMessage({ type: 'APPLY_MOVE', fen, moveJson });
+        const applyMoveListener = (e) => {
+            if (e.data.type !== 'APPLY_MOVE_RESULT') return;
+            window.chessWorkers[0].removeEventListener('message', applyMoveListener);
+            if (!e.data.data.newFen) {
+                getAiMoveSingleWorker();
+                return;
+            }
+            const newFen = e.data.data.newFen;
+            boardState = fenToBoard(newFen);
+            const played = normalizeMove(bestOverall);
+            lastMove = played;
+            moveHistory.push(played.text);
+            candidateMoves = [played, ...candidateMoves.filter(move => move.text !== played.text)].slice(0, 8);
+            setSearchFlow([
+                { text: `Engine chose ${played.text}`, state: 'done' },
+                { text: `Score ${Number.isFinite(bestOverall.score) ? displayScore(bestOverall.score).toFixed(2) : 'n/a'}`, state: 'done' }
+            ]);
+            window.chessWorkers.forEach(worker => worker.postMessage({ type: 'INIT_BOARD', payload: { fen: newFen } }));
+            isAwaitingAi = false;
+            refreshLegalMoves(true);
+        };
+        window.chessWorkers[0].addEventListener('message', applyMoveListener);
+    }
+
+    async function getAiMoveSingleWorker() {
+        try {
+            const fen = boardToFen();
+            await new Promise((resolve) => {
+                const listener = (e) => {
+                    if (e.data.type === 'INIT_BOARD_RESULT') {
+                        window.chessWorker.removeEventListener('message', listener);
+                        resolve();
+                    }
+                };
+                window.chessWorker.addEventListener('message', listener);
+                window.chessWorker.postMessage({ type: 'INIT_BOARD', payload: { fen } });
+            });
+            const aiMove = await callWorker('GET_AI_MOVE', { isWhiteTurn: aiIsWhite() });
+            if (aiMove && aiMove.valid) {
+                if (!aiMove.gamestatus) endGame('lose');
+                if (aiMove.newFen) boardState = fenToBoard(aiMove.newFen);
+                if (aiMove.move) {
+                    const played = normalizeMove(aiMove.move);
+                    lastMove = played;
+                    moveHistory.push(played.text);
+                }
+                window.chessWorkers.forEach(worker => worker.postMessage({
+                    type: 'INIT_BOARD',
+                    payload: { fen: aiMove.newFen || boardToFen() }
+                }));
+            } else {
+                endGame('win');
+            }
+        } catch (error) {
+            statusElement.textContent = 'Error: ' + error.message;
+        } finally {
+            isAwaitingAi = false;
+            refreshLegalMoves(true);
+        }
+    }
+
+    async function initGame() {
         const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
         boardState = fenToBoard(startFen);
-
-        // Sync the worker state
-        if (window.chessWorker) {
-            window.chessWorker.postMessage({ type: "INIT_BOARD", payload: { fen: startFen } });
-        }
-
+        window.chessWorkers.forEach(worker => worker.postMessage({ type: 'INIT_BOARD', payload: { fen: startFen } }));
         fromSquare = null;
         isAwaitingAi = false;
         isGameOver = false;
         gameOutcome = null;
+        lastMove = null;
+        legalMoves = [];
+        candidateMoves = [];
+        moveHistory = [];
         hideGameOverUi();
-        statusElement.textContent = 'White to move';
+        setSearchFlow([{ text: 'Opening position loaded', state: 'done' }]);
         updateUi();
+        if (playerIsWhite()) {
+            refreshLegalMoves();
+        } else {
+            setSearchFlow([{ text: 'AI plays white first', state: 'active' }]);
+            setTimeout(() => getAiMove(), 100);
+        }
     }
 
-    // Wait for worker to be ready before starting game first time
-    window.onChessWorkerReady = () => {
-        initGame();
-    };
+    heatmapToggle.addEventListener('click', () => {
+        heatmapEnabled = !heatmapEnabled;
+        heatmapToggle.textContent = heatmapEnabled ? 'Heatmap On' : 'Heatmap Off';
+        heatmapToggle.classList.toggle('off', !heatmapEnabled);
+        heatmapToggle.setAttribute('aria-pressed', String(heatmapEnabled));
+        updateUi();
+    });
 
+    sideSelect.addEventListener('change', initGame);
+
+    window.onChessWorkerReady = () => initGame();
     restartButton.addEventListener('click', initGame);
     document.getElementById('game-over-restart').addEventListener('click', initGame);
-    // Don't call initGame() directly here anymore, wasm-init.js will call window.onChessWorkerReady
 });

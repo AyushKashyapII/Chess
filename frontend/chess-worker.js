@@ -31,7 +31,7 @@ let wasmInstance;
 })();
 
 onmessage = function (e) {
-    const { type, payload, fen, movesToSearch } = e.data;
+    const { type, payload, fen, movesToSearch, isWhiteTurn } = e.data;
 
     switch (type) {
         case "INIT_BOARD":
@@ -41,12 +41,12 @@ onmessage = function (e) {
             break;
         case "VALIDATE_MOVE":
             console.log("Worker: Validating move string", payload);
-            const valResult = self.validate_move_string_wasm(payload.moveString);
+            const valResult = self.validate_move_string_wasm(payload.moveString, payload.isWhiteTurn);
             postMessage({ type: "VALIDATE_MOVE_RESULT", payload: valResult });
             break;
         case "GET_AI_MOVE":
             console.log("Worker: Getting AI move");
-            const aiResult = self.get_ai_move_string_wasm();
+            const aiResult = self.get_ai_move_string_wasm(payload.isWhiteTurn);
             postMessage({ type: "GET_AI_MOVE_RESULT", payload: aiResult });
             break;
         case "GET_ALL_MOVES":
@@ -58,7 +58,7 @@ onmessage = function (e) {
         case "SEARCH_SUBSET":
             // Root splitting: search only the assigned moves
             console.log("Worker: Searching subset of moves", movesToSearch);
-            const resultJson = self.search_subset_wasm(fen, JSON.stringify(movesToSearch));
+            const resultJson = self.search_subset_wasm(fen, JSON.stringify(movesToSearch), isWhiteTurn);
             postMessage({ type: "SEARCH_SUBSET_RESULT", data: resultJson });
             break;
         case "APPLY_MOVE":

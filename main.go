@@ -25,13 +25,13 @@ type Move struct {
 
 type ValidateRequest struct {
 	//Fen  string `json:"fen"`
-	Move Move   `json:"move"`
+	Move Move `json:"move"`
 }
 
 type ValidateResponse struct {
-	GameStatus bool `json:"gamestatus"`
-	Valid  bool   `json:"valid"`
-	NewFen string `json:"newFen,omitempty"`
+	GameStatus bool   `json:"gamestatus"`
+	Valid      bool   `json:"valid"`
+	NewFen     string `json:"newFen,omitempty"`
 }
 
 func main() {
@@ -40,12 +40,12 @@ func main() {
 	js.Global().Set("init_board_wasm", js.FuncOf(init_board_wasm))
 	js.Global().Set("validate_move_string_wasm", js.FuncOf(validate_move_string_wasm))
 	js.Global().Set("get_ai_move_string_wasm", js.FuncOf(get_ai_move_string_wasm))
-	
+
 	// Root splitting functions for parallel search
 	js.Global().Set("get_all_legal_moves_wasm", js.FuncOf(get_all_legal_moves_wasm))
 	js.Global().Set("search_subset_wasm", js.FuncOf(search_subset_wasm))
 	js.Global().Set("apply_move_wasm", js.FuncOf(apply_move_wasm))
-	
+
 	// Keep old functions for backward compatibility
 	js.Global().Set("validate_move_wasm", js.FuncOf(validate_move_wasm))
 	js.Global().Set("get_ai_move_wasm", js.FuncOf(get_ai_move_wasm))
@@ -267,7 +267,11 @@ func validate_move_string_wasm(this js.Value, args []js.Value) interface{} {
 	}
 
 	moveStr := strings.TrimSpace(strings.ToLower(args[0].String()))
-	
+	isWhiteTurn := true
+	if len(args) > 1 {
+		isWhiteTurn = args[1].Bool()
+	}
+
 	if len(moveStr) != 4 {
 		return js.ValueOf(map[string]interface{}{"valid": false, "error": "invalid move format, use e2e4"})
 	}
@@ -277,7 +281,7 @@ func validate_move_string_wasm(this js.Value, args []js.Value) interface{} {
 
 	fromRow, fromCol, ok1 := squareToCoords(fromSq)
 	toRow, toCol, ok2 := squareToCoords(toSq)
-	
+
 	if !ok1 || !ok2 {
 		return js.ValueOf(map[string]interface{}{"valid": false, "error": "invalid squares"})
 	}
@@ -286,14 +290,21 @@ func validate_move_string_wasm(this js.Value, args []js.Value) interface{} {
 	if piece == 0 {
 		return js.ValueOf(map[string]interface{}{"valid": false, "error": "no piece on that square"})
 	}
-	
-	if !isWhitePiece(piece) {
-		return js.ValueOf(map[string]interface{}{"valid": false, "error": "not a white piece"})
+
+	if isWhitePiece(piece) != isWhiteTurn {
+		side := "white"
+		if !isWhiteTurn {
+			side = "black"
+		}
+		return js.ValueOf(map[string]interface{}{"valid": false, "error": "not a " + side + " piece"})
 	}
 
 	var promotionPiece *rune
 	if piece == 'P' && toRow == 0 {
 		q := 'Q'
+		promotionPiece = &q
+	} else if piece == 'p' && toRow == 7 {
+		q := 'q'
 		promotionPiece = &q
 	}
 
@@ -325,7 +336,11 @@ func validate_move_string_wasm(this js.Value, args []js.Value) interface{} {
 
 // get_ai_move_string_wasm returns AI move in format "e2e4" (like engine_cli.go)
 func get_ai_move_string_wasm(this js.Value, args []js.Value) interface{} {
-	bestMove := handlers.FindBestMove(currentBoard, false)
+	isWhiteTurn := false
+	if len(args) > 0 {
+		isWhiteTurn = args[0].Bool()
+	}
+	bestMove := handlers.FindBestMove(currentBoard, isWhiteTurn)
 
 	if bestMove.FromRow == 0 && bestMove.FromCol == 0 &&
 		bestMove.ToRow == 0 && bestMove.ToCol == 0 {
@@ -344,8 +359,8 @@ func get_ai_move_string_wasm(this js.Value, args []js.Value) interface{} {
 
 	currentBoard = applyMove(currentBoard, move)
 
-	// Check if white has any moves left
-	isPossibleMove := handlers.FindBestMove(currentBoard, true)
+	// Check if the human side has any moves left.
+	isPossibleMove := handlers.FindBestMove(currentBoard, !isWhiteTurn)
 	isPossible := true
 	if isPossibleMove.FromRow == 0 && isPossibleMove.FromCol == 0 &&
 		isPossibleMove.ToRow == 0 && isPossibleMove.ToCol == 0 {
@@ -369,15 +384,15 @@ func get_all_legal_moves_wasm(this js.Value, args []js.Value) interface{} {
 	if len(args) > 0 {
 		fen = args[0].String()
 	}
-	
+
 	board := parseFEN(fen)
 	isWhiteTurn := false // For AI move, it's black's turn
 	if len(args) > 1 {
 		isWhiteTurn = args[1].Bool()
 	}
-	
+
 	allMoves := handlers.GenereateAllMoves(board, isWhiteTurn)
-	
+
 	// Convert to JSON-serializable format
 	type MoveJSON struct {
 		FromRow int `json:"fromRow"`
@@ -385,7 +400,7 @@ func get_all_legal_moves_wasm(this js.Value, args []js.Value) interface{} {
 		ToRow   int `json:"toRow"`
 		ToCol   int `json:"toCol"`
 	}
-	
+
 	movesJSON := make([]MoveJSON, len(allMoves))
 	for i, move := range allMoves {
 		movesJSON[i] = MoveJSON{
@@ -395,12 +410,12 @@ func get_all_legal_moves_wasm(this js.Value, args []js.Value) interface{} {
 			ToCol:   move.ToCol,
 		}
 	}
-	
+
 	jsonBytes, err := json.Marshal(movesJSON)
 	if err != nil {
 		return js.ValueOf(map[string]interface{}{"error": err.Error()})
 	}
-	
+
 	return js.ValueOf(string(jsonBytes))
 }
 
@@ -409,13 +424,16 @@ func search_subset_wasm(this js.Value, args []js.Value) interface{} {
 	if len(args) < 2 {
 		return js.ValueOf(map[string]interface{}{"error": "missing arguments"})
 	}
-	
+
 	fen := args[0].String()
 	movesJson := args[1].String()
-	
+
 	board := parseFEN(fen)
-	isWhiteTurn := false // For AI move, it's black's turn
-	
+	isWhiteTurn := false
+	if len(args) > 2 {
+		isWhiteTurn = args[2].Bool()
+	}
+
 	// Parse moves from JSON
 	type MoveJSON struct {
 		FromRow int `json:"fromRow"`
@@ -423,12 +441,12 @@ func search_subset_wasm(this js.Value, args []js.Value) interface{} {
 		ToRow   int `json:"toRow"`
 		ToCol   int `json:"toCol"`
 	}
-	
+
 	var movesJSON []MoveJSON
 	if err := json.Unmarshal([]byte(movesJson), &movesJSON); err != nil {
 		return js.ValueOf(map[string]interface{}{"error": "invalid moves JSON: " + err.Error()})
 	}
-	
+
 	// Convert to handlers.Move
 	movesToSearch := make([]handlers.Move, len(movesJSON))
 	for i, m := range movesJSON {
@@ -439,16 +457,16 @@ func search_subset_wasm(this js.Value, args []js.Value) interface{} {
 			ToCol:   m.ToCol,
 		}
 	}
-	
+
 	// Search the subset
 	bestMove, bestScore := handlers.SearchSpecificMoves(board, isWhiteTurn, movesToSearch)
-	
+
 	// Convert move to string format
 	moveString := coordsToSquare(bestMove.FromRow, bestMove.FromCol) + coordsToSquare(bestMove.ToRow, bestMove.ToCol)
-	
+
 	return js.ValueOf(map[string]interface{}{
-		"move":  moveString,
-		"score": bestScore,
+		"move":    moveString,
+		"score":   bestScore,
 		"fromRow": bestMove.FromRow,
 		"fromCol": bestMove.FromCol,
 		"toRow":   bestMove.ToRow,
@@ -461,12 +479,12 @@ func apply_move_wasm(this js.Value, args []js.Value) interface{} {
 	if len(args) < 2 {
 		return js.ValueOf(map[string]interface{}{"error": "missing arguments"})
 	}
-	
+
 	fen := args[0].String()
 	moveJson := args[1].String()
-	
+
 	board := parseFEN(fen)
-	
+
 	// Parse move from JSON
 	type MoveJSON struct {
 		FromRow int `json:"fromRow"`
@@ -474,23 +492,23 @@ func apply_move_wasm(this js.Value, args []js.Value) interface{} {
 		ToRow   int `json:"toRow"`
 		ToCol   int `json:"toCol"`
 	}
-	
+
 	var moveJSON MoveJSON
 	if err := json.Unmarshal([]byte(moveJson), &moveJSON); err != nil {
 		return js.ValueOf(map[string]interface{}{"error": "invalid move JSON: " + err.Error()})
 	}
-	
+
 	move := Move{
 		FromRow: moveJSON.FromRow,
 		FromCol: moveJSON.FromCol,
 		ToRow:   moveJSON.ToRow,
 		ToCol:   moveJSON.ToCol,
 	}
-	
+
 	// Apply move using the proper Go function
 	newBoard := applyMove(board, move)
 	newFen := boardToFEN(newBoard)
-	
+
 	return js.ValueOf(map[string]interface{}{
 		"newFen": newFen,
 	})

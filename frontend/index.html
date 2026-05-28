@@ -11,15 +11,66 @@
 
 <body>
 
-    <h1>Go Chess Engine</h1>
+    <main class="analysis-shell">
+        <section class="board-panel" aria-label="Chess board">
+            <div class="brand-row">
+                <div>
+                    <p class="eyebrow">Go Chess Engine</p>
+                    <h1>Analysis Board</h1>
+                </div>
+                <div id="status" class="status-pill">White to move</div>
+            </div>
 
-    <div id="board-container">
-        <div id="board"></div>
-    </div>
+            <div id="board-container">
+                <div id="board"></div>
+            </div>
+        </section>
 
-    <div id="status">White to move</div>
+        <aside class="control-panel" aria-label="Engine controls and analysis">
+            <div class="action-row">
+                <button type="button" id="restart-button" class="primary-action">New Game</button>
+            </div>
 
-    <button type="button" id="restart-button">New Game</button>
+            <button type="button" id="heatmap-toggle" class="wide-toggle" aria-pressed="true">Heatmap On</button>
+
+            <label class="field">
+                <span>Side</span>
+                <select id="side-select">
+                    <option selected>White</option>
+                    <option>Black</option>
+                </select>
+            </label>
+
+            <section class="analysis-card">
+                <h2>Position FEN</h2>
+                <div id="fen-display" class="fen-display"></div>
+            </section>
+
+            <section class="analysis-card">
+                <h2>Principal Variation</h2>
+                <div id="pv-display" class="pv-display">Make a move to start the line.</div>
+            </section>
+
+            <div class="analysis-grid">
+                <section class="analysis-card">
+                    <h2>Candidates</h2>
+                    <ol id="candidates-list" class="candidate-list"></ol>
+                </section>
+
+                <section class="analysis-card">
+                    <h2>Moves</h2>
+                    <ol id="moves-list" class="moves-list"></ol>
+                </section>
+            </div>
+
+            <section class="analysis-card search-flow-card">
+                <h2>Search Flow</h2>
+                <div id="search-flow" class="search-flow">
+                    <div class="flow-node idle">Waiting for the first move</div>
+                </div>
+            </section>
+        </aside>
+    </main>
 
     <div id="game-over-overlay" class="game-over-overlay hidden" aria-hidden="true">
         <div id="game-over-card" class="game-over-card" role="dialog" aria-labelledby="game-over-title" aria-describedby="game-over-subtitle">
