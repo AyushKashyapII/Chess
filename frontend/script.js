@@ -367,15 +367,41 @@ document.addEventListener('DOMContentLoaded', () => {
         return chunks;
     }
 
+    function waitForWorkerMessage(worker, resultType, startWork, timeoutMs = 12000) {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                worker.removeEventListener('message', listener);
+                reject(new Error(`${resultType} timed out`));
+            }, timeoutMs);
+            const listener = (e) => {
+                if (e.data.type !== resultType) return;
+                clearTimeout(timeout);
+                worker.removeEventListener('message', listener);
+                resolve(e.data);
+            };
+            worker.addEventListener('message', listener);
+            startWork();
+        });
+    }
+
+    async function syncWorkers(fen) {
+        await Promise.all(window.chessWorkers.map(worker => {
+            return waitForWorkerMessage(worker, 'INIT_BOARD_RESULT', () => {
+                worker.postMessage({ type: 'INIT_BOARD', payload: { fen } });
+            }, 5000);
+        }));
+    }
+
     async function getAiMove() {
         isAwaitingAi = true;
         updateUi();
         try {
             const fen = boardToFen();
             setSearchFlow([
-                { text: 'Board synced to engine', state: 'done' },
+                { text: 'Board synced to workers', state: 'done' },
                 { text: `Generating ${sideName(aiIsWhite()).toLowerCase()} legal moves`, state: 'active' }
             ]);
+            await syncWorkers(fen);
             const allMoves = await getLegalMovesForCurrentSide(aiIsWhite());
             candidateMoves = allMoves.slice(0, 8);
             updateUi();
@@ -386,13 +412,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            const moveObjects = allMoves.map(move => move.raw || {
+                fromRow: move.fromRow,
+                fromCol: move.fromCol,
+                toRow: move.toRow,
+                toCol: move.toCol
+            });
+            const chunks = splitIntoChunks(moveObjects, window.chessWorkers.length);
+            const activeChunks = chunks
+                .map((chunk, index) => ({ chunk, index }))
+                .filter(item => item.chunk.length > 0);
+
+            setSearchFlow(activeChunks.map(item => ({
+                text: `Worker ${item.index + 1}: ${item.chunk.length} candidate moves`,
+                state: 'active'
+            })));
+
+            const settled = await Promise.allSettled(activeChunks.map(item => {
+                const worker = window.chessWorkers[item.index];
+                return waitForWorkerMessage(worker, 'SEARCH_SUBSET_RESULT', () => {
+                    worker.postMessage({
+                        type: 'SEARCH_SUBSET',
+                        fen,
+                        movesToSearch: item.chunk,
+                        isWhiteTurn: aiIsWhite()
+                    });
+                });
+            }));
+
+            const workerResults = settled
+                .filter(result => result.status === 'fulfilled' && result.value.data && !result.value.data.error)
+                .map(result => result.value.data);
+
+            if (workerResults.length === 0) {
+                throw new Error('No worker search results returned');
+            }
+
             setSearchFlow([
-                { text: `${allMoves.length} candidate moves found`, state: 'done' },
-                { text: 'Searching best move', state: 'active' }
+                { text: `${workerResults.length}/${activeChunks.length} workers finished`, state: 'done' },
+                { text: 'Comparing candidate scores', state: 'active' }
             ]);
-            getAiMoveSingleWorker();
+            finishAiSearch(workerResults, fen);
         } catch (error) {
-            console.error('AI search failed:', error);
+            console.error('Parallel AI search failed, falling back:', error);
+            setSearchFlow([
+                { text: 'Parallel search fallback', state: 'active' },
+                { text: error.message, state: 'done' }
+            ]);
             getAiMoveSingleWorker();
         }
     }
